@@ -1,0 +1,45 @@
+Recently asked automation Architect Interview Question
+
+1.Selenium
+	About Shadow dom and how do you identify in selenium
+	What BIDI in selenium
+	IRetryAnalyzer in TestNG
+	How do you reduce automation execution runs from 12 hrs to 8 hrs,approach
+	
+Java : 
+	what are streams in java
+	coding : String s="geeksforgeeks"; o/p:eeeefggkkorss	
+	Answ:
+	 String s="geeksforgeeks";
+	 s.chars().mapToObj(c->String.valueOf((char)c)).sorted().forEach(v->System.out.print(v));
+
+API Rest Assured:
+	What is contract Testing
+	What is idempotency in RestAssure,related methods
+	how do u test Json Response both Structural and Bussiness
+	What is serailization and Deserialzation
+	Framework Approach for Rest Assured/Resuable componenets
+	
+
+2.Playwright
+	locator strategies
+	Annotations
+	Fixtures
+
+3.Database
+	Write query to fetch average of amount spend on orders
+	Customers and Order table given
+
+4.AI :
+	What AI Features you have used in recent projects
+	how do u verify whether AI has given right TCs
+
+
+5.Behaviourial :
+
+	What Are main aspects you consider as Automation Architect to drive automation
+	What metrics you assess for automation and why
+	how do driver automation from scratch
+	How do u achieve maximum coverage in automation
+	Team size handled
+#Selenium #interview #java #RestAssured #Architect #AI

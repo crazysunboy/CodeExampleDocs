@@ -1,0 +1,63 @@
+Object composition is the industry standard for handling massive pages in the Page Object Model (POM). Managing 100 elements in a single class creates a maintenance nightmare, violates the Single Responsibility Principle, and makes your code unreadable.By breaking the page down into smaller, logical sections, you make your framework modular, reusable, and easy to maintain.How to Implement Object Composition in POMInstead of mapping all 100 elements to one class, identify distinct visual or functional areas on the webpage (e.g., Header, Sidebar, Main Data Table, Footer).1. Create Component ClassesBuild separate classes for each smaller section. These classes only contain elements and methods specific to that section.java// Component for the Header section
+public class HeaderComponent {
+    private WebDriver driver;
+
+    // Elements limited to the header
+    private By searchBox = By.id("search");
+    private By profileIcon = By.id("profile");
+
+    public HeaderComponent(WebDriver driver) {
+        this.driver = driver;
+    }
+
+    public void searchForProduct(String product) {
+        driver.findElement(searchBox).sendKeys(product);
+    }
+}
+Use code with caution.java// Component for a complex data table section
+public class TableComponent {
+    private WebDriver driver;
+
+    private By tableRows = By.xpath("//table[@id='data-table']/tr");
+    private By nextButton = By.id("next-page");
+
+    public TableComponent(WebDriver driver) {
+        this.driver = driver;
+    }
+
+    public int getRowCount() {
+        return driver.findElements(tableRows).size();
+    }
+}
+Use code with caution.2. Compose the Main Page ObjectInstantiate these smaller components inside your main Page Object class. This main class acts as a coordinator.java// The main page containing 100+ elements
+public class DashboardPage {
+    private WebDriver driver;
+    
+    // Exposed components
+    public HeaderComponent header;
+    public TableComponent table;
+
+    public DashboardPage(WebDriver driver) {
+        this.driver = driver;
+        // Initialize the components
+        this.header = new HeaderComponent(driver);
+        this.table = new TableComponent(driver);
+    }
+    
+    // Main page actions can coordinate between components if needed
+    public void searchAndVerifyResults(String item) {
+        header.searchForProduct(item);
+        // Additional page-level validation logic
+    }
+}
+Use code with caution.3. Write Clean Test ScriptsYour tests remain highly readable because you navigate through the page's components naturally.javapublic class DashboardTest {
+    @Test
+    public void testUserSearch() {
+        DashboardPage dashboard = new DashboardPage(driver);
+        
+        // Clear, readable access via composition
+        dashboard.header.searchForProduct("Laptop");
+        Assert.assertTrue(dashboard.table.getRowCount() > 0);
+    }
+}
+Use code with caution.Best Practices for Large PagesIdentify Global Reusability: Components like headers, footers, and navigation menus can be reused across entirely different page objects.Lazy Initialization: If some sections are hidden behind tabs and rarely used, initialize those components only when the user clicks the tab to save memory.Use Specific Selectors: Ensure selectors within a component are scoped correctly so they do not accidentally interact with identical elements in other sections.Avoid Over-nesting: Keep composition to 1 or 2 levels deep (e.g., Page -> Component) to avoid long, confusing chains in your test code like page.sidebar.menu.submenu.button.click().To help tailor this design to your project, let me know:What type of page is this? (e.g., dashboard, complex form, data grid?)Are you using standard Selenium By locators or PageFactory (@FindBy)?Do any of these page sections repeat dynamically on the screen?I can provide a concrete architectural pattern based on your specific layout.

@@ -1,0 +1,881 @@
+To do this entirely within your Java code without plugins or bash scripts, you can create a custom TestNG Listener. This listener will intercept your test results dynamically, read the qTest Test Run ID from a custom annotation on your test method, and immediately push the execution status to the qTest REST API. [1, 2] 
+Here is the complete implementation guide.
+## Step 1: Create a Custom Java Annotation
+Create a custom annotation to declare your qTest Test Run ID directly over your Selenium test methods.
+
+package com.qtest.annotations;
+import java.lang.annotation.ElementType;import java.lang.annotation.Retention;import java.lang.annotation.RetentionPolicy;import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)public @interface QTestRun {
+    long id(); // This will store your numeric qTest Test Run ID
+}
+
+## Step 2: Create the TestNG Listener
+This listener implements ITestListener. It checks your test status on completion, looks for the @QTestRun annotation, and fires a native HTTP request to the qTest API. [3, 4, 5] 
+(Make sure you have an HTTP client library like java.net.http available in your project, which is built into Java 11+).
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestRun;import org.testng.ITestListener;import org.testng.ITestResult;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;
+public class QTestListener implements ITestListener {
+
+    // Configuration Settings (Can also load these from a config.properties file)
+    private static final String QTEST_URL = "https://qtestnet.com";
+    private static final String API_TOKEN = "YOUR_QTEST_API_TOKEN_HERE";
+    private static final String PROJECT_ID = "12345"; 
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        sendResultToQTest(result, "PASSED");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        sendResultToQTest(result, "FAILED");
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        sendResultToQTest(result, "SKIPPED");
+    }
+
+    private void sendResultToQTest(ITestResult result, String status) {
+        // Look for our custom annotation on the executing test method
+        QTestRun qTestAnnotation = result.getMethod()
+                                         .getConstructorOrMethod()
+                                         .getMethod()
+                                         .getAnnotation(QTestRun.class);
+
+        if (qTestAnnotation == null) {
+            System.out.println("Skipping qTest sync: No @QTestRun annotation found on " + result.getName());
+            return;
+        }
+
+        long runId = qTestAnnotation.id();
+        String timestamp = Instant.now().toString(); // Formats automatically to ISO-8601 UTC
+
+        // Construct the qTest JSON Payload
+        String jsonPayload = "{"
+                + "\"status\": \"" + status + "\","
+                + "\"exe_start_date\": \"" + timestamp + "\","
+                + "\"exe_end_date\": \"" + timestamp + "\","
+                + "\"name\": \"Automated Execution via TestNG Listener\""
+                + "}";
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(QTEST_URL + "/api/v3/projects/" + PROJECT_ID + "/test-runs/" + runId + "/auto-test-logs"))
+                    .header("Authorization", API_TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                System.out.println("Successfully logged result to qTest Run ID: " + runId);
+            } else {
+                System.err.println("Failed to log to qTest. Status Code: " + response.statusCode() + " | Response: " + response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("Error sending request to qTest REST API: " + e.getMessage());
+        }
+    }
+}
+
+## Step 3: Apply the Annotation and Listener to your Tests
+Now, add the @Listeners annotation to your test class (or define it in your testng.xml), and apply your @QTestRun annotation to your Selenium test cases. [6, 7] 
+
+package com.yourcompany.tests;
+import com.qtest.annotations.QTestRun;import com.qtest.listeners.QTestListener;import org.testng.annotations.Listeners;import org.testng.annotations.Test;
+
+@Listeners(QTestListener.class) // Attaches your custom API listenerpublic class LoginSeleniumTest {
+
+    // Replace 8765432 with your exact qTest Test Run ID
+    @Test
+    @QTestRun(id = 8765432) 
+    public void testSuccessfulLogin() {
+        // Your actual Selenium/Maven code here
+        System.out.println("Running Selenium test...");
+    }
+}
+
+## Step 4: Run via Jenkins
+Because all logic is packed into your Java code, you do not need any special tools configured on your Jenkins agent. Your build step remains basic:
+
+mvn clean test
+
+As Maven executes the suite, TestNG will trigger the listener at the end of each test method, automatically posting results to your existing qTest test runs. [8] 
+If you would like to expand this to upload failure error messages or logs to qTest when a test fails, let me know! I can show you how to extract the exception trace from ITestResult.
+
+[1] [https://testng.org](https://testng.org/testng_listeners.html)
+[2] [https://www.linkedin.com](https://www.linkedin.com/pulse/testng-listeners-selenium-java-7-tips-boost-automation-sachin-ban-jqfmf)
+[3] [https://medium.com](https://medium.com/@Ramitdhamija/testng-listeners-in-selenium-webdriver-with-examples-e636844fcae9)
+[4] [https://thekiranacademy.com](https://thekiranacademy.com/tutorials/selenium/listeners-for-testng.php)
+[5] [https://xebia.com](https://xebia.com/blog/conditionally-running-tests-in-testng/)
+[6] [https://testng.org](https://testng.org/testng_listeners.html)
+[7] [https://www.wecreateproblems.com](https://www.wecreateproblems.com/interview-questions/testng-interview-questions)
+[8] [https://www.adaface.com](https://www.adaface.com/blog/testng-interview-questions/)
+
+
+yes
+
+To upload failure details and exception traces directly to qTest when a test fails, you can modify the JSON payload inside your TestNG listener to include the note property.
+Here is the updated implementation that safely extracts the exception trace and formats it cleanly for qTest.
+## Step 1: Update the Listener Code
+Modify the QTestListener.java class to accept the exception details from the ITestResult object and append them to your JSON payload.
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestRun;import org.testng.ITestListener;import org.testng.ITestResult;import java.io.PrintWriter;import java.io.StringWriter;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;
+public class QTestListener implements ITestListener {
+
+    private static final String QTEST_URL = "https://qtestnet.com";
+    private static final String API_TOKEN = "YOUR_QTEST_API_TOKEN_HERE";
+    private static final String PROJECT_ID = "12345"; 
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        sendResultToQTest(result, "PASSED", "Test executed successfully.");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        // Extract the error message and full stack trace
+        String failureReason = "Exception encountered: " + result.getThrowable().getMessage();
+        String stackTrace = getStackTraceAsString(result.getThrowable());
+        
+        // Combine them into a clean string for the qTest logs
+        String note = failureReason + "\n\nFull Stack Trace:\n" + stackTrace;
+        sendResultToQTest(result, "FAILED", note);
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        sendResultToQTest(result, "SKIPPED", "Test was skipped.");
+    }
+
+    private void sendResultToQTest(ITestResult result, String status, String note) {
+        QTestRun qTestAnnotation = result.getMethod()
+                                         .getConstructorOrMethod()
+                                         .getMethod()
+                                         .getAnnotation(QTestRun.class);
+
+        if (qTestAnnotation == null) {
+            return;
+        }
+
+        long runId = qTestAnnotation.id();
+        String timestamp = Instant.now().toString();
+
+        // Sanitize the text to prevent invalid JSON formatting caused by quotes or newlines
+        String escapedNote = escapeJson(note);
+
+        // Construct the payload with the updated 'note' field
+        String jsonPayload = "{"
+                + "\"status\": \"" + status + "\","
+                + "\"exe_start_date\": \"" + timestamp + "\","
+                + "\"exe_end_date\": \"" + timestamp + "\","
+                + "\"note\": \"" + escapedNote + "\","
+                + "\"name\": \"Automated Execution via TestNG Listener\""
+                + "}";
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(QTEST_URL + "/api/v3/projects/" + PROJECT_ID + "/test-runs/" + runId + "/auto-test-logs"))
+                    .header("Authorization", API_TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            System.err.println("Error sending log to qTest: " + e.getMessage());
+        }
+    }
+
+    // Helper method to convert Throwable stack trace into a readable String
+    private String getStackTraceAsString(Throwable throwable) {
+        if (throwable == null) return "";
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        throwable.printStackTrace(pw);
+        return sw.toString();
+    }
+
+    // Helper method to clean up Java strings so they don't break the raw JSON payload
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\b", "\\b")
+                    .replace("\f", "\\f")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+    }
+}
+
+## Step 2: View the Output in qTest
+When a test fails in Jenkins, this listener automatically captures the core failure description along with the precise line numbers from your Java stack trace.
+If you navigate to your test execution run inside qTest Manager, click on the specific failed log item, and you will see the full error text rendered inside the Execution Log / Note box for fast troubleshooting.
+If your framework requires capturing and uploading Selenium browser screenshots on failure alongside these text logs, let me know! I can show you how to convert your screenshot to a Base64 string or hit the qTest attachment API endpoint.
+
+This maps an existing test run, what if I want to create a new test run everytime with certin test case idfs and run them?
+
+To dynamically create a new Test Run under a specific Test Cycle using a Test Case ID every time your suite executes, you must change your workflow slightly.
+Instead of pushing directly to a Test Run ID, your TestNG Listener will now perform a two-step API process on failure or success:
+
+   1. Create/Instantiate a new Test Run inside your desired qTest Test Cycle using the Test Case ID.
+   2. Post the execution log and stack trace directly to that newly created Test Run ID.
+
+Here is how to update your setup.
+## Step 1: Update Your Custom Annotation
+Switch your annotation to track the Test Case ID (instead of a static run ID) and specify the parent Test Cycle ID where the runs should be generated.
+
+package com.qtest.annotations;
+import java.lang.annotation.ElementType;import java.lang.annotation.Retention;import java.lang.annotation.RetentionPolicy;import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)public @interface QTestCase {
+    long caseId();   // The existing manual Test Case ID (e.g., 123456)
+    long cycleId();  // The parent Test Cycle ID where the new run will be created
+}
+
+## Step 2: Implement the Two-Step Listener Logic
+Update QTestListener.java to handle the dynamic creation request before submitting results.
+(Note: We use a simple regex tool to extract the newly created run ID from qTest's JSON response so we don't need heavy third-party JSON parser libraries).
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestCase;import org.testng.ITestListener;import org.testng.ITestResult;import java.io.PrintWriter;import java.io.StringWriter;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;import java.util.regex.Matcher;import java.util.regex.Pattern;
+public class QTestListener implements ITestListener {
+
+    private static final String QTEST_URL = "https://qtestnet.com";
+    private static final String API_TOKEN = "YOUR_QTEST_API_TOKEN_HERE";
+    private static final String PROJECT_ID = "12345"; 
+    private final HttpClient client = HttpClient.newHttpClient();
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        processAndSend(result, "PASSED", "Test executed successfully.");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        String note = "Exception: " + result.getThrowable().getMessage() 
+                    + "\n\nStack Trace:\n" + getStackTraceAsString(result.getThrowable());
+        processAndSend(result, "FAILED", note);
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        processAndSend(result, "SKIPPED", "Test was skipped.");
+    }
+
+    private void processAndSend(ITestResult result, String status, String note) {
+        QTestCase qTestCase = result.getMethod()
+                                    .getConstructorOrMethod()
+                                    .getMethod()
+                                    .getAnnotation(QTestCase.class);
+
+        if (qTestCase == null) return;
+
+        long caseId = qTestCase.caseId();
+        long cycleId = qTestCase.cycleId();
+        String testName = result.getName() + " - Run " + Instant.now().getEpochSecond();
+
+        // Step 1: Create the new Test Run dynamically inside the Test Cycle
+        String runId = createTestRun(caseId, cycleId, testName);
+        
+        if (runId != null) {
+            // Step 2: Post the execution status and log trace to the new Run ID
+            submitExecutionLog(runId, status, note);
+        }
+    }
+
+    private String createTestRun(long caseId, long cycleId, String runName) {
+        String jsonPayload = "{"
+                + "\"name\": \"" + runName + "\","
+                + "\"test_case\": { \"id\": " + caseId + " },"
+                + "\"parentId\": " + cycleId + ","
+                + "\"parentType\": \"test-cycle\""
+                + "}";
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(QTEST_URL + "/api/v3/projects/" + PROJECT_ID + "/test-runs"))
+                    .header("Authorization", API_TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                // Quick regex to extract the "id":XXXX field from the qTest response
+                Matcher matcher = Pattern.compile("\"id\"\\s*:\\s*(\\d+)").matcher(response.body());
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
+            } else {
+                System.err.println("Failed to create Test Run. Code: " + response.statusCode() + " | Response: " + response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("Error creating Test Run: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private void submitExecutionLog(String runId, String status, String note) {
+        String timestamp = Instant.now().toString();
+        String jsonPayload = "{"
+                + "\"status\": \"" + status + "\","
+                + "\"exe_start_date\": \"" + timestamp + "\","
+                + "\"exe_end_date\": \"" + timestamp + "\","
+                + "\"note\": \"" + escapeJson(note) + "\""
+                + "}";
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(QTEST_URL + "/api/v3/projects/" + PROJECT_ID + "/test-runs/" + runId + "/auto-test-logs"))
+                    .header("Authorization", API_TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            System.err.println("Error posting execution log: " + e.getMessage());
+        }
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        if (throwable == null) return "";
+        StringWriter sw = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+    }
+}
+
+## Step 3: Tag Your Test Cases
+Apply your new annotation to your Selenium tests. Provide the core Test Case ID and the Parent Test Cycle ID container where new logs should spawn during every single execution. [1, 2] 
+
+package com.yourcompany.tests;
+import com.qtest.annotations.QTestCase;import com.qtest.listeners.QTestListener;import org.testng.annotations.Listeners;import org.testng.annotations.Test;
+
+@Listeners(QTestListener.class)public class CheckoutSeleniumTest {
+
+    // caseId = Manual Test Case ID, cycleId = Destination Test Cycle ID
+    @Test
+    @QTestCase(caseId = 55443322, cycleId = 998877) 
+    public void testCheckoutProcess() {
+        // Your Selenium code here
+    }
+}
+
+Now, every single build execution triggered via Jenkins will generate a fresh, Timestamped Test Run record natively grouped inside your target Test Cycle!
+If you want to optimize your network traffic by batching all test results into a single payload at the very end of the suite run instead of hitting the endpoint on every individual test method, let me know! I can show you how to leverage onFinish instead.
+
+[1] [https://www.testmuai.com](https://www.testmuai.com/blog/speed-up-selenium-test-cases-execution/)
+[2] [https://docs.tricentis.com](https://docs.tricentis.com/qtest-saas/content/apis/apis/test_cycle_apis.htm)
+
+what happens if I multiple test cases? this code will create multiple test runs then?
+
+Yes, that is exactly correct. Because the logic is inside onTestSuccess and onTestFailure, it triggers independently for every single test method.
+If you have 50 test cases, this code will make 100 individual API calls (50 to create the runs, 50 to log the results). This will slow down your test suite and clutter your qTest Test Cycle with dozens of individual test runs.
+To fix this, you should switch to a Batched Listener approach. Instead of calling qTest during the test, you collect all the results in memory and send them to qTest in one single API call at the very end of your entire suite using onFinish. [1] 
+Here is how to update your framework for batching:
+## Step 1: Update the Listener to Batch Results
+We will use qTest's Bulk Automation Log API (POST /api/v3/projects/{projectId}/auto-test-logs?type=automation). This endpoint accepts an array of test results, automatically looks for the matching automation_content (your package + class + method name), and creates or updates the runs all at once. [2] 
+Update your QTestListener.java to look like this:
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestCase;import org.testng.ITestContext;import org.testng.ITestListener;import org.testng.ITestResult;import java.io.PrintWriter;import java.io.StringWriter;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;import java.util.ArrayList;import java.util.List;
+public class QTestListener implements ITestListener {
+
+    private static final String QTEST_URL = "https://qtestnet.com";
+    private static final String API_TOKEN = "YOUR_QTEST_API_TOKEN_HERE";
+    private static final String PROJECT_ID = "12345";
+    private static final String TEST_CYCLE_ID = "998877"; // Target cycle for new runs
+
+    // Thread-safe list to collect logs during execution
+    private final List<String> testLogsJson = new ArrayList<>();
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        recordResult(result, "PASSED", "Executed successfully.");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        String note = "Exception: " + result.getThrowable().getMessage() 
+                    + "\n\nStack Trace:\n" + getStackTraceAsString(result.getThrowable());
+        recordResult(result, "FAILED", note);
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        recordResult(result, "SKIPPED", "Test skipped.");
+    }
+
+    private void recordResult(ITestResult result, String status, String note) {
+        QTestCase qTestCase = result.getMethod()
+                                    .getConstructorOrMethod()
+                                    .getMethod()
+                                    .getAnnotation(QTestCase.class);
+
+        if (qTestCase == null) return;
+
+        String timestamp = Instant.now().toString();
+        // Unique identifier matching the automation content format
+        String automationContent = result.getTestClass().getName() + "#" + result.getName();
+
+        // Construct individual log JSON snippet matching qTest bulk schema
+        String logJson = "{"
+                + "\"test_case_version_id\": " + qTestCase.caseId() + "," // Alternative format for direct case targeting
+                + "\"status\": \" " + status + "\","
+                + "\"execution_start_date\": \"" + timestamp + "\","
+                + "\"execution_end_date\": \"" + timestamp + "\","
+                + "\"note\": \"" + escapeJson(note) + "\","
+                + "\"automation_content\": \"" + automationContent + "\","
+                + "\"name\": \"" + result.getName() + "\""
+                + "}";
+
+        synchronized (testLogsJson) {
+            testLogsJson.add(logJson);
+        }
+    }
+
+    // This triggers ONCE after all tests in the <test> tag finish
+    @Override
+    public void onFinish(ITestContext context) {
+        if (testLogsJson.isEmpty()) return;
+
+        // Wrap all individual logs into a single master JSON array
+        String finalPayload = "{"
+                + "\"test_cycle\": " + TEST_CYCLE_ID + ","
+                + "\"test_logs\": [" + String.join(",", testLogsJson) + "]"
+                + "}";
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(QTEST_URL + "/api/v3/projects/" + PROJECT_ID + "/auto-test-logs?type=automation"))
+                    .header("Authorization", API_TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(finalPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("Bulk upload status: " + response.statusCode());
+        } catch (Exception e) {
+            System.err.println("Failed to bulk upload logs: " + e.getMessage());
+        }
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        if (throwable == null) return "";
+        StringWriter sw = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+    }
+}
+
+## Step 2: Simplify Your Custom Annotation
+Because the target Test Cycle ID is now handled globally at the end of the suite, your test annotation only needs to track the specific core Test Case ID for mapping:
+
+package com.qtest.annotations;
+import java.lang.annotation.ElementType;import java.lang.annotation.Retention;import java.lang.annotation.RetentionPolicy;import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)public @interface QTestCase {
+    long caseId(); // The numeric qTest Test Case ID
+}
+
+## Why this is better:
+
+* One Network Call: Even if you have 500 tests, it sends exactly 1 network request at the very end.
+* No Test Execution Delay: Your Selenium tests run at full speed without waiting for network API requests mid-suite.
+* Clean Grouping: qTest will parse the batch array and logically map them under your single Test Cycle automatically. [3] 
+
+Would you like to know how to parameterize the TEST_CYCLE_ID using your testng.xml or Jenkins environment variables so you don't have it hardcoded in the Java listener?
+
+[1] [https://adamj.eu](https://adamj.eu/tech/2021/04/12/how-to-convert-a-testcase-from-setup-to-setuptestdata/)
+[2] [https://www.browserstack.com](https://www.browserstack.com/docs/test-management/api-reference/test-results)
+[3] [https://www.browserstack.com](https://www.browserstack.com/guide/ui-testing-guide)
+
+yes
+
+To make your framework completely dynamic and pipeline-ready, we will extract the qTest URL, API Token, Project ID, and Test Cycle ID from your environment variables. This allows Jenkins to pass down different Cycle IDs or credentials without changing your Java code.
+Here is the complete production-ready code implementation for your framework.
+## 1. The Custom Annotation (QTestCase.java)
+This keeps your test methods cleanly tagged with their respective manual Test Case ID.
+
+package com.qtest.annotations;
+import java.lang.annotation.ElementType;import java.lang.annotation.Retention;import java.lang.annotation.RetentionPolicy;import java.lang.annotation.Target;
+
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)public @interface QTestCase {
+    long caseId(); // The numeric qTest Test Case ID
+}
+
+## 2. The Complete Batched Listener (QTestListener.java)
+This class collects all test outcomes in a thread-safe list and pushes them via a single REST API call during the onFinish phase. It safely fetches values from System.getenv() falling back to system properties if needed.
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestCase;import org.testng.ITestContext;import org.testng.ITestListener;import org.testng.ITestResult;import java.io.PrintWriter;import java.io.StringWriter;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;import java.util.ArrayList;import java.util.Collections;import java.util.List;
+public class QTestListener implements ITestListener {
+
+    // Thread-safe list to aggregate logs during execution
+    private final List<String> testLogsJson = Collections.synchronizedList(new ArrayList<>());
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        recordResult(result, "PASSED", "Executed successfully.");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        String note = "Exception: " + result.getThrowable().getMessage() 
+                    + "\n\nStack Trace:\n" + getStackTraceAsString(result.getThrowable());
+        recordResult(result, "FAILED", note);
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        recordResult(result, "SKIPPED", "Test was skipped.");
+    }
+
+    private void recordResult(ITestResult result, String status, String note) {
+        // Find the custom annotation on the executing test method
+        QTestCase qTestCase = result.getMethod()
+                                    .getConstructorOrMethod()
+                                    .getMethod()
+                                    .getAnnotation(QTestCase.class);
+
+        if (qTestCase == null) {
+            System.out.println("Skipping qTest logging for " + result.getName() + ": No @QTestCase annotation found.");
+            return;
+        }
+
+        String timestamp = Instant.now().toString();
+        String automationContent = result.getTestClass().getName() + "#" + result.getName();
+
+        // Construct individual execution log following qTest bulk schema format
+        String logJson = "{"
+                + "\"test_case_version_id\": " + qTestCase.caseId() + ","
+                + "\"status\": \"" + status + "\","
+                + "\"execution_start_date\": \"" + timestamp + "\","
+                + "\"execution_end_date\": \"" + timestamp + "\","
+                + "\"note\": \"" + escapeJson(note) + "\","
+                + "\"automation_content\": \"" + automationContent + "\","
+                + "\"name\": \"" + result.getName() + "\""
+                + "}";
+
+        testLogsJson.add(logJson);
+    }
+
+    @Override
+    public void onFinish(ITestContext context) {
+        if (testLogsJson.isEmpty()) {
+            System.out.println("No qTest results captured to upload.");
+            return;
+        }
+
+        // Dynamically fetch config parameters from environment variables passed by Jenkins/OS
+        String qTestUrl = getEnvOrProperty("QTEST_URL");
+        String apiToken = getEnvOrProperty("QTEST_API_TOKEN");
+        String projectId = getEnvOrProperty("QTEST_PROJECT_ID");
+        String testCycleId = getEnvOrProperty("QTEST_CYCLE_ID");
+
+        if (qTestUrl == null || apiToken == null || projectId == null || testCycleId == null) {
+            System.err.println("qTest bulk upload aborted: Missing required environment variables (QTEST_URL, QTEST_API_TOKEN, QTEST_PROJECT_ID, QTEST_CYCLE_ID).");
+            return;
+        }
+
+        // Construct master batched JSON payload
+        String finalPayload = "{"
+                + "\"test_cycle\": " + testCycleId + ","
+                + "\"test_logs\": [" + String.join(",", testLogsJson) + "]"
+                + "}";
+
+        System.out.println("Sending " + testLogsJson.size() + " test results to qTest...");
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(qTestUrl + "/api/v3/projects/" + projectId + "/auto-test-logs?type=automation"))
+                    .header("Authorization", apiToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(finalPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                System.out.println("Successfully uploaded batch results to qTest. Status Code: " + response.statusCode());
+            } else {
+                System.err.println("Failed to upload batch logs to qTest. Code: " + response.statusCode() + " | Response: " + response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("Error establishing connection to qTest REST API during bulk upload: " + e.getMessage());
+        }
+    }
+
+    private String getEnvOrProperty(String key) {
+        String value = System.getenv(key);
+        return (value != null) ? value : System.getProperty(key);
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        if (throwable == null) return "";
+        StringWriter sw = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+    }
+}
+
+## 3. Sample Selenium Test Class (LoginTests.java)
+Simply hook up the global TestNG @Listeners annotation and provide the core test case IDs.
+
+package com.yourcompany.tests;
+import com.qtest.annotations.QTestCase;import com.qtest.listeners.QTestListener;import org.testng.Assert;import org.testng.annotations.Listeners;import org.testng.annotations.Test;
+
+@Listeners(QTestListener.class)public class LoginTests {
+
+    @Test
+    @QTestCase(caseId = 111111) // Maps directly to Test Case ID 111111 in qTest
+    public void testValidLogin() {
+        System.out.println("Executing Selenium Valid Login Step...");
+        // Your actual WebDriver steps here
+    }
+
+    @Test
+    @QTestCase(caseId = 222222) // Maps directly to Test Case ID 222222 in qTest
+    public void testInvalidLoginException() {
+        System.out.println("Executing Selenium Invalid Login Step...");
+        // Intentional failure to verify stack trace handling
+        Assert.fail("Element 'dashboard-profile' not found on screen within timeout.");
+    }
+}
+
+## 4. Configuration on Jenkins Side (Jenkinsfile)
+Inside your Jenkins pipeline, wrap your variables using an environment block. This keeps confidential parameters like the API token out of source control.
+
+pipeline {
+    agent any
+    environment {
+        // Inject credentials safely using Jenkins credentials store helper
+        QTEST_URL       = 'https://qtestnet.com'
+        QTEST_API_TOKEN = credentials('qtest-api-secret-token') 
+        QTEST_PROJECT_ID = '12345'
+        QTEST_CYCLE_ID   = '998877' // Change this anytime to direct outputs into alternative Test Cycles
+    }
+    stages {
+        stage('Checkout Source') {
+            steps {
+                git 'https://github.com'
+            }
+        }
+        stage('Execute Automation') {
+            steps {
+                // '|| true' ensures that even if tests fail, Jenkins continues to the onFinish reporting pipeline
+                sh 'mvn clean test || true'
+            }
+        }
+    }
+}
+
+If you ever need to pass these values strictly via command line properties instead of standard environment variables, you can modify your execution step to look like mvn clean test -DQTEST_CYCLE_ID=${QTEST_CYCLE_ID} without needing to adjust the underlying listener code.
+Would you like to know how to enhance the listener to handle parallel test execution safely if you use multi-threaded TestNG runs?
+
+yes
+
+To make your framework completely safe for multi-threaded and parallel test execution (e.g., running tests in parallel via classes, methods, or suites), we need to address potential thread-safety issues.
+The previous listener used a Collections.synchronizedList, which protects the list itself from crashing when elements are added simultaneously. However, because tests execute concurrently, individual steps, logs, and timestamps can bleed into each other if not properly isolated.
+To fix this, we introduce ThreadLocal to isolate the state of each running test execution thread.
+Here is the enhanced, completely parallel-safe listener implementation:
+## Updated Parallel-Safe Listener (QTestListener.java)
+
+package com.qtest.listeners;
+import com.qtest.annotations.QTestCase;import org.testng.ITestContext;import org.testng.ITestListener;import org.testng.ITestResult;import java.io.PrintWriter;import java.io.StringWriter;import java.net.URI;import java.net.http.HttpClient;import java.net.http.HttpRequest;import java.net.http.HttpResponse;import java.time.Instant;import java.util.ArrayList;import java.util.Collections;import java.util.List;
+public class QTestListener implements ITestListener {
+
+    // Thread-safe concurrent list to collect final logs from all parallel threads
+    private final List<String> testLogsJson = Collections.synchronizedList(new ArrayList<>());
+
+    // ThreadLocal isolates the start time for each individual test thread
+    private final ThreadLocal<Instant> testStartTime = new ThreadLocal<>();
+
+    @Override
+    public void onTestStart(ITestResult result) {
+        // Capture the precise start time for this specific thread
+        testStartTime.set(Instant.now());
+    }
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        recordResult(result, "PASSED", "Executed successfully.");
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        String note = "Exception: " + result.getThrowable().getMessage() 
+                    + "\n\nStack Trace:\n" + getStackTraceAsString(result.getThrowable());
+        recordResult(result, "FAILED", note);
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        recordResult(result, "SKIPPED", "Test was skipped.");
+    }
+
+    private void recordResult(ITestResult result, String status, String note) {
+        try {
+            QTestCase qTestCase = result.getMethod()
+                                        .getConstructorOrMethod()
+                                        .getMethod()
+                                        .getAnnotation(QTestCase.class);
+
+            if (qTestCase == null) {
+                System.out.println("Skipping qTest logging for " + result.getName() + ": No @QTestCase annotation found.");
+                return;
+            }
+
+            // Retrieve thread-isolated start time, fall back to current time if missing
+            Instant start = testStartTime.get();
+            String startTimeStr = (start != null) ? start.toString() : Instant.now().toString();
+            String endTimeStr = Instant.now().toString();
+            
+            String automationContent = result.getTestClass().getName() + "#" + result.getName();
+
+            // Construct individual JSON payload snippet
+            String logJson = "{"
+                    + "\"test_case_version_id\": " + qTestCase.caseId() + ","
+                    + "\"status\": \" " + status + "\","
+                    + "\"execution_start_date\": \"" + startTimeStr + "\","
+                    + "\"execution_end_date\": \"" + endTimeStr + "\","
+                    + "\"note\": \"" + escapeJson(note) + "\","
+                    + "\"automation_content\": \"" + automationContent + "\","
+                    + "\"name\": \"" + result.getName() + "\""
+                    + "}";
+
+            testLogsJson.add(logJson);
+        } finally {
+            // Clean up ThreadLocal to prevent memory leaks in shared thread pools
+            testStartTime.remove();
+        }
+    }
+
+    @Override
+    public void onFinish(ITestContext context) {
+        if (testLogsJson.isEmpty()) {
+            System.out.println("No qTest results captured to upload.");
+            return;
+        }
+
+        String qTestUrl = getEnvOrProperty("QTEST_URL");
+        String apiToken = getEnvOrProperty("QTEST_API_TOKEN");
+        String projectId = getEnvOrProperty("QTEST_PROJECT_ID");
+        String testCycleId = getEnvOrProperty("QTEST_CYCLE_ID");
+
+        if (qTestUrl == null || apiToken == null || projectId == null || testCycleId == null) {
+            System.err.println("qTest bulk upload aborted: Missing required environment variables.");
+            return;
+        }
+
+        // Combine all thread results safely into one JSON body
+        String finalPayload = "{"
+                + "\"test_cycle\": " + testCycleId + ","
+                + "\"test_logs\": [" + String.join(",", testLogsJson) + "]"
+                + "}";
+
+        System.out.println("[qTest] Sending bulk payload of " + testLogsJson.size() + " test results...");
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(qTestUrl + "/api/v3/projects/" + projectId + "/auto-test-logs?type=automation"))
+                    .header("Authorization", apiToken)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(finalPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                System.out.println("[qTest] Successfully uploaded batch results. Status Code: " + response.statusCode());
+            } else {
+                System.err.println("[qTest] Failed bulk log upload. Code: " + response.statusCode() + " | Response: " + response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("[qTest] Error establishing connection during bulk upload: " + e.getMessage());
+        }
+    }
+
+    private String getEnvOrProperty(String key) {
+        String value = System.getenv(key);
+        return (value != null) ? value : System.getProperty(key);
+    }
+
+    private String getStackTraceAsString(Throwable throwable) {
+        if (throwable == null) return "";
+        StringWriter sw = new StringWriter();
+        throwable.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+    }
+}
+
+## Verification: Your testng.xml Setup
+To test this parallel processing, set up your testng.xml file to run tests concurrently (e.g., using parallel="methods" and a thread-count).
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org">
+<suite name="Selenium Parallel Suite" parallel="methods" thread-count="4">
+    <listeners>
+        <listener class-name="com.qtest.listeners.QTestListener" />
+    </listeners>
+    <test name="Login And Checkout Tests">
+        <classes>
+            <class name="com.yourcompany.tests.LoginTests" />
+        </classes>
+    </test>
+</suite>
+
+## Why this is completely thread-safe:
+
+* No Shared Timestamps: By tracking testStartTime inside a ThreadLocal<Instant>, Thread A will never overwrite or pull the execution timestamp belonging to Thread B.
+* Atomic List Aggregation: The list tracking the final payloads (testLogsJson) uses a strictly synchronized wrapper ensuring that simultaneous list.add() requests from multi-threaded execution never drop reports or trigger ConcurrentModificationExceptions.
+* Clean Bulk Dispatch: When all parallel execution threads complete their code blocks, the single master thread runs onFinish exactly once, delivering an organized array straight to qTest.
+
+Would you like help setting up a data-driven structure (like using TestNG @DataProvider) to see how to dynamic-link individual rows of data to distinct qTest IDs?
+

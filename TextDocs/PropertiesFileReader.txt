@@ -1,0 +1,88 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Properties;
+
+/**
+ * A comprehensive, thread-safe utility class for loading and accessing properties files.
+ * Tries the classpath first, and falls back to the file system path if not found.
+ */
+public final class PropertyResourceReader {
+
+    // Thread-safe instance initialized exactly once by the JVM
+    private static final Properties properties = new Properties();
+
+    static {
+        // Automatically load the default configuration file on class initialization
+        try {
+            loadProperties("config.properties");
+        } catch (Exception e) {
+            // Log warning or handle case where default file isn't present at startup
+            System.err.println("Default config.properties not loaded during initialization: " + e.getMessage());
+        }
+    }
+
+    // Private constructor to prevent instantiation
+    private PropertyResourceReader() {}
+
+    /**
+     * Public API to explicitly load or append data from a specific properties file.
+     * 
+     * @param path The filename or path (e.g., "application.properties" or "/opt/config/app.properties")
+     */
+    public static void loadProperties(String path) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            // properties.load() is internally thread-safe
+            properties.load(inputStream);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load properties file: " + path, e);
+        }
+    }
+
+    /**
+     * Completely thread-safe read method to fetch properties by key.
+     * 
+     * @param key The property key
+     * @return    The property value, or null if not found
+     */
+    public static String get(String key) {
+        return properties.getProperty(key);
+    }
+
+    /**
+     * Completely thread-safe read method with a default fallback value.
+     * 
+     * @param key          The property key
+     * @param defaultValue The value to return if the key does not exist
+     * @return             The property value, or the defaultValue
+     */
+    public static String get(String key, String defaultValue) {
+        return properties.getProperty(key, defaultValue);
+    }
+
+    /**
+     * Helper method to locate and open the properties file.
+     * Tries the classpath first. If not found, falls back to the local file system.
+     */
+    private static InputStream getResourceStream(String path) throws IOException {
+        // 1. Try to load from Classpath
+        String resourcePath = path.startsWith("/") ? path : "/" + path;
+        InputStream inputStream = PropertyResourceReader.class.getResourceAsStream(resourcePath);
+        
+        if (inputStream != null) {
+            return inputStream;
+        }
+
+        // 2. Fallback: Try to load from File System Path
+        Path fileSystemPath = Paths.get(path);
+		// Files.isRegularFile checks that the path exists, is a file, is not a directory, and is accessible
+        if (Files.isRegularFile(fileSystemPath)) {
+            return Files.newInputStream(fileSystemPath);
+        }
+
+        // 3. Throw exception if both locations fail
+        throw new IllegalArgumentException("Properties file not found on classpath or file system: " + path);
+    }
+}

@@ -1,0 +1,390 @@
+Here is the complete tutorial with every single method written out alongside its own dedicated, type-safe code example.
+________________________________________
+1. String Methods
+const str: string = "TypeScript Code";
+
+// --- Searching & Matching ---
+
+// .includes(): checks if substring exists
+const hasType: boolean = str.includes("Type"); // true
+
+// .startsWith(): checks prefix
+const starts: boolean = str.startsWith("Type"); // true
+
+// .endsWith(): checks suffix
+const ends: boolean = str.endsWith("Code"); // true
+
+// .indexOf(): index of first match or -1
+const firstIdx: number = str.indexOf("e"); // 3
+
+// .lastIndexOf(): index of last match or -1
+const lastIdx: number = str.lastIndexOf("e"); // 14
+
+// .match(): matches regex, returns array or null
+const matches: RegExpMatchArray | null = str.match(/[A-Z]/g); // ["T", "S", "C"]
+
+// .matchAll(): returns iterator of all regex matches with capture groups
+const matchesIterator = str.matchAll(/e/g); 
+// IterableIterator<RegExpExecArray>
+
+// --- Transformation & Extraction ---
+
+// .split(): breaks string into string[]
+const words: string[] = str.split(" "); // ["TypeScript", "Code"]
+
+// .slice(): extracts section from start to end index
+const sliced: string = str.slice(0, 4); // "Type"
+
+// .substring(): extracts section (negative indices treated as 0)
+const sub: string = str.substring(4, 10); // "Script"
+
+// .replace(): replaces first occurrence
+const replaced: string = str.replace("e", "X"); // "TypXScript Code"
+
+// .replaceAll(): replaces all occurrences
+const replacedAll: string = str.replaceAll("e", "X"); // "TypXScript CodX"
+
+// .toLowerCase(): switches casing to lowercase
+const lower: string = str.toLowerCase(); // "typescript code"
+
+// .toUpperCase(): switches casing to uppercase
+const upper: string = str.toUpperCase(); // "TYPESCRIPT CODE"
+
+// .trim(): removes leading and trailing whitespace
+const dirtyStr: string = "  hello  ";
+const cleanStr: string = dirtyStr.trim(); // "hello"
+
+// .padStart(): pads start of string to target length
+const paddedStart: string = "5".padStart(3, "0"); // "005"
+
+// .padEnd(): pads end of string to target length
+const paddedEnd: string = "5".padEnd(3, "!"); // "5!!"
+
+// .repeat(): repeats string count times
+const standardRepeat: string = "Abc".repeat(2); // "AbcAbc"
+
+// .concat(): combines strings
+const combined: string = "A".concat("B", "C"); // "ABC"
+________________________________________
+2. Number Methods
+const num: number = 12345.6789;
+
+// --- Instance Methods ---
+
+// .toFixed(): formats decimals, returns string
+const fixedStr: string = num.toFixed(2); // "12345.68"
+
+// .toString(): converts to string (can pass radix/base)
+const basicStr: string = num.toString(); // "12345.6789"
+const binaryStr: string = (10).toString(2); // "1010"
+
+// .toPrecision(): formats to specific total digits, returns string
+const precisionStr: string = num.toPrecision(5); // "12346"
+
+// .toLocaleString(): language-sensitive formatting
+const formattedCurrency: string = num.toLocaleString("en-US", { style: "currency", currency: "USD" }); 
+// "$12,345.68"
+
+// .toExponential(): returns exponential notation string
+const expStr: string = num.toExponential(2); // "1.23e+4"
+
+// --- Static Methods (Number Namespace) ---
+
+// Number.parseInt(): converts string to integer
+const parsedInt: number = Number.parseInt("42px"); // 42
+
+// Number.parseFloat(): converts string to floating point
+const parsedFloat: number = Number.parseFloat("3.14abc"); // 3.14
+
+// Number.isNaN(): strictly checks if value is NaN
+const checkNaN: boolean = Number.isNaN(NaN); // true
+
+// Number.isInteger(): checks if value is finite integer
+const checkInt: boolean = Number.isInteger(10.5); // false
+
+// Number.isSafeInteger(): checks if inside safe JavaScript bounds
+const safeInt: boolean = Number.isSafeInteger(9007199254740991); // true
+
+// Number.isFinite(): checks if value is regular finite number
+const checkFinite: boolean = Number.isFinite(Infinity); // false
+________________________________________
+3. Array Methods
+// --- Mutating Methods (Alters Original Array) ---
+const mutable: number[] =;
+
+// .push(): adds to end, returns new length
+const newLen: number = mutable.push(4); // mutable is now [1, 2, 3, 4]
+
+// .pop(): removes and returns last element
+const poppedItem: number | undefined = mutable.pop(); // 4, mutable is [1, 2, 3]
+
+// .unshift(): adds to start, returns new length
+mutable.unshift(0); // mutable is now [0, 1, 2, 3]
+
+// .shift(): removes and returns first element
+const shiftedItem: number | undefined = mutable.shift(); // 0, mutable is [1, 2, 3]
+
+// .splice(): deletes/replaces/adds items at an index
+mutable.splice(1, 1, 99); // removes 1 item at index 1 and inserts 99. mutable is [1, 99, 3]
+
+// .reverse(): reverses array in place
+mutable.reverse(); // mutable is [3, 99, 1]
+
+// .sort(): sorts array in place (always pass compare function for numbers)
+mutable.sort((a, b) => a - b); // mutable is [1, 3, 99]
+
+// .fill(): fills section with static value
+const emptyArr = new Array(3).fill(7); // [7, 7, 7]
+
+
+// --- Non-Mutating Methods (Returns New Data) ---
+const base: number[] =;
+
+// .map(): transforms elements
+const doubled: number[] = base.map(n => n * 2); // [20, 40, 60, 80]
+
+// .filter(): filters by condition
+const filtered: number[] = base.filter(n => n > 25); // [30, 40]
+
+// .reduce(): collapses array down to single value
+const sum: number = base.reduce((acc, curr) => acc + curr, 0); // 100
+
+// .slice(): extracts shallow copy of part of array
+const slicedArr: number[] = base.slice(1, 3); // [20, 30]
+
+// .concat(): merges arrays
+const merged: number[] = base.concat([50, 60]); // [10, 20, 30, 40, 50, 60]
+
+// .join(): converts elements to string with separator
+const csv: string = base.join(","); // "10,20,30,40"
+
+// .flat(): flattens nested arrays
+const nested: number[][] = [[1, 2], [3, 4]];
+const flat: number[] = nested.flat(); // [1, 2, 3, 4]
+
+// .flatMap(): maps elements then flattens result
+const flatMapped: string[] = ["hi words"].flatMap(s => s.split(" ")); 
+// ["hi", "words"]
+
+
+// --- Searching & Condition Checking ---
+
+// .find(): returns first match or undefined
+const found: number | undefined = base.find(n => n > 25); // 30
+
+// .findIndex(): returns index of first match or -1
+const foundIdx: number = base.findIndex(n => n === 30); // 2
+
+// .findLast(): returns last match or undefined
+const lastFound: number | undefined = base.findLast(n => n > 15); // 40
+
+// .findLastIndex(): returns index of last match or -1
+const lastFoundIdx: number = base.findLastIndex(n => n > 15); // 3
+
+// .includes(): checks if item exists
+const dynamicHas: boolean = base.includes(20); // true
+
+// .indexOf(): index of item or -1
+const idx: number = base.indexOf(20); // 1
+
+// .lastIndexOf(): last index of item or -1
+const lIdx: number = base.lastIndexOf(20); // 1
+
+// .some(): checks if at least one item matches condition
+const hasLarge: boolean = base.some(n => n > 35); // true
+
+// .every(): checks if all items match condition
+const allLarge: boolean = base.every(n => n > 5); // true
+
+
+// --- Modern Non-Mutating Alternatives (ES2023) ---
+
+// .toReversed(): returns reversed copy
+const revCopy: number[] = base.toReversed(); // [40, 30, 20, 10]
+
+// .toSorted(): returns sorted copy
+const sortCopy: number[] = base.toSorted((a, b) => b - a); // [40, 30, 20, 10]
+
+// .toSpliced(): returns copied array with items added/removed
+const spliceCopy: number[] = base.toSpliced(1, 2); // [10, 40]
+
+// .with(): returns copy with index element replaced
+const replacedCopy: number[] = base.with(0, 999); // [999, 20, 30, 40]
+
+
+// --- Static Methods ---
+
+// Array.isArray(): checks if value is an array
+const checkArr: boolean = Array.isArray(base); // true
+
+// Array.from(): builds array from iterable or array-like object
+const letters: string[] = Array.from("abc"); // ["a", "b", "c"]
+________________________________________
+4. Tuple Operations
+// Tuples use Array methods under the hood but enforce fixed-element types.
+type UserRecord = [id: number, username: string, isActive?: boolean];
+
+const user: UserRecord = [45, "alex_dev"];
+
+// --- Reading Values & Safe Access ---
+
+// Access via Index: compiler guarantees correct types
+const id: number = user[0]; // 45
+const nameStr: string = user[1]; // "alex_dev"
+
+// Destructuring: clean extraction with matching types
+const [userId, userName, userStatus] = user; 
+// userId type: number, userName type: string, userStatus type: boolean | undefined
+
+// Optional access check
+if (user[2] !== undefined) {
+  const status: boolean = user[2];
+}
+
+// --- Dynamic Spread / Concatenation Safely ---
+
+// Spreading tuple into new literal contexts
+const extendedUser = [...user, "Admin"] as const; 
+// Creates a read-only tuple structure: readonly [number, string, (boolean | undefined)?, "Admin"]
+________________________________________
+5. Set Methods
+const mySet = new Set<string>(["A", "B"]);
+
+// --- Standard Operations ---
+
+// .add(): inserts value. Chainable because it returns the set.
+mySet.add("C").add("A"); // Set is now {"A", "B", "C"} (Duplicate "A" ignored)
+
+// .has(): checks presence
+const hasB: boolean = mySet.has("B"); // true
+
+// .delete(): removes value, returns boolean success
+const wasDeleted: boolean = mySet.delete("Z"); // false
+
+// .size: property tracking element count
+const setSize: number = mySet.size; // 3
+
+// .clear(): empties entire set
+mySet.clear(); // mySet.size is now 0
+
+
+// --- Iteration Methods ---
+const iterSet = new Set<number>([10, 20]);
+
+// .values() or .keys(): returns values iterator (identical outputs for sets)
+for (const val of iterSet.values()) {
+  console.log(val); // 10, then 20
+}
+
+// .entries(): returns iterator of [value, value] pairs
+for (const [k, v] of iterSet.entries()) {
+  console.log(k); // 10, then 20
+}
+
+
+// --- Modern Set Composition Methods (ES2024+) ---
+const alpha = new Set([1, 2, 3]);
+const beta = new Set([3, 4, 5]);
+
+// .intersection(): elements found in both sets
+const inter = alpha.intersection(beta); // Set { 3 }
+
+// .union(): combined unique items from both sets
+const uni = alpha.union(beta); // Set { 1, 2, 3, 4, 5 }
+
+// .difference(): items in alpha that are not in beta
+const diff = alpha.difference(beta); // Set { 1, 2 }
+
+// .symmetricDifference(): items in either set, but not both
+const symDiff = alpha.symmetricDifference(beta); // Set { 1, 2, 4, 5 }
+
+// .isSubsetOf(): check if all elements exist inside target set
+const subsetCheck: boolean = new Set([1, 2]).isSubsetOf(alpha); // true
+
+// .isSupersetOf(): check if set completely contains target set
+const superCheck: boolean = alpha.isSupersetOf(new Set([1, 2])); // true
+
+// .isDisjointFrom(): checks if sets share zero common values
+const disjointCheck: boolean = alpha.isDisjointFrom(new Set([9, 10])); // true
+________________________________________
+6. Map Methods
+const myMap = new Map<string, number>();
+
+// --- Standard Operations ---
+
+// .set(): assigns key to value. Chainable because it returns the map.
+myMap.set("USD", 1).set("EUR", 0.9);
+
+// .get(): retrieves value. Enforces type return: V | undefined
+const rate: number | undefined = myMap.get("USD"); // 1
+const missing: number | undefined = myMap.get("JPY"); // undefined
+
+// .has(): checks key existence
+const hasEur: boolean = myMap.has("EUR"); // true
+
+// .delete(): deletes key-value pair, returns boolean success
+const deletedKey: boolean = myMap.delete("USD"); // true
+
+// .size: counts keys
+const totalKeys: number = myMap.size; // 1
+
+// .clear(): wipes all entries
+myMap.clear(); // myMap.size is now 0
+
+
+// --- Iteration Methods ---
+const loopMap = new Map<string, string>([["id", "A1"], ["role", "Admin"]]);
+
+// .keys(): loops through keys
+for (const key of loopMap.keys()) {
+  console.log(key); // "id", then "role"
+}
+
+// .values(): loops through values
+for (const value of loopMap.values()) {
+  console.log(value); // "A1", then "Admin"
+}
+
+// .entries(): loops through [key, value] pairs
+for (const [key, value] of loopMap.entries()) {
+  console.log(`${key}: ${value}`); // "id: A1", "role: Admin"
+}
+
+// .forEach(): standard iteration loop
+loopMap.forEach((value: string, key: string) => {
+  console.log(value);
+});
+________________________________________
+Final Check: Running modern methods safely
+Methods like toSorted(), intersection(), or with() require your project targets to be modern. Check your tsconfig.json to make sure your execution settings match your code framework requirements:
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"]
+  }
+}
+
+
+Here are the essential static methods available directly on the global String namespace in TypeScript.
+// --- Static Methods (String Namespace) ---
+
+// String.fromCharCode(): creates a string from a sequence of UTF-16 code units
+const greeting: string = String.fromCharCode(72, 69, 76, 76, 79); 
+// "HELLO"
+
+// String.fromCodePoint(): creates a string from a sequence of code points (handles emojis/extended characters)
+const rocketEmoji: string = String.fromCodePoint(0x1F680); 
+// "🚀"
+
+// String.raw(): returns raw string representation, ignoring escape sequences (like \n or \t)
+const filePath: string = String.raw`C:\Development\node\templates`; 
+// "C:\Development\node\templates" (No accidental tab or newline breaks)
+Updated tsconfig.json Note
+To use String.fromCodePoint and String.raw without compiler warnings, verify that your project library settings target at least ES2015 (ES6) or higher:
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"]
+  }
+}
+

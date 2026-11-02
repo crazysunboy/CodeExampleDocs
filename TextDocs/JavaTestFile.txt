@@ -1,0 +1,2 @@
+Writing line 1 through Java write method
+Writing line 2 through Java write method

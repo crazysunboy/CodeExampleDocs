@@ -1,0 +1,131 @@
+/*
+Thread safe and production-ready utility class for reading data from json files. It combines strong typing via DTO classes, flexible parsing into generic Maps, and fluent traversal using Jackson's JsonNode.
+*/
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A comprehensive utility class for reading and parsing JSON files.
+ * Tries the classpath first, and falls back to the file system path if not found.
+ */
+public final class JsonResourceReader {
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Private constructor to prevent instantiation
+    private JsonResourceReader() {}
+
+    /**
+     * 1. STRONGLY TYPED: Reads JSON into a specific Java object/DTO.
+     */
+    public static <T> T readAsObject(String path, Class<T> targetClass) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            return objectMapper.readValue(inputStream, targetClass);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse JSON as object: " + path, e);
+        }
+    }
+
+    /**
+     * 2. STRONGLY TYPED LIST: Reads a JSON array into a List of specific Java objects/DTOs.
+     */
+    public static <T> List<T> readAsList(String path, Class<T> targetClass) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            return objectMapper.readValue(inputStream, objectMapper.getTypeFactory().constructCollectionType(List.class, targetClass));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse JSON as List: " + path, e);
+        }
+    }
+
+    /**
+     * 3. DYNAMIC MAP: Reads a JSON object into a generic Map without requiring a class.
+     */
+    public static Map<String, Object> readAsMap(String path) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            return objectMapper.readValue(inputStream, new TypeReference<Map<String, Object>>() {});
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse JSON as Map: " + path, e);
+        }
+    }
+
+    /**
+     * 4. DYNAMIC LIST OF MAPS: Reads a JSON array into a List of generic Maps.
+     */
+    public static List<Map<String, Object>> readAsListOfMaps(String path) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            return objectMapper.readValue(inputStream, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse JSON as List of Maps: " + path, e);
+        }
+    }
+
+    /**
+     * 5. TREE MODEL (JsonNode): Reads JSON into a navigable tree structure to avoid type-casting.
+     */
+    public static JsonNode readAsTree(String path) {
+        try (InputStream inputStream = getResourceStream(path)) {
+            return objectMapper.readTree(inputStream);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to parse JSON as Tree/JsonNode: " + path, e);
+        }
+    }
+
+    /**
+     * Helper method to locate and open the JSON file.
+     * Tries the classpath first. If not found, falls back to the local file system.
+     */
+    private static InputStream getResourceStream(String path) throws IOException {
+        // 1. Try to load from Classpath
+        String resourcePath = path.startsWith("/") ? path : "/" + path;
+        InputStream inputStream = JsonResourceReader.class.getResourceAsStream(resourcePath);
+        
+        if (inputStream != null) {
+            return inputStream;
+        }
+
+        // 2. Fallback: Try to load from File System Path
+        Path fileSystemPath = Paths.get(path);
+		// Files.isRegularFile checks that the path exists, is a file, is not a directory, and is accessible
+        if (Files.isRegularFile(fileSystemPath)) {
+            return Files.newInputStream(fileSystemPath);
+        }
+
+        // 3. Throw exception if both locations fail
+        throw new IllegalArgumentException("File not found on classpath or file system: " + path);
+    }
+}
+
+
+/*
+//Cheat Sheet: Quick Usage Examples
+// 1. Map to a specific DTO
+User user = JsonResourceReader.readAsObject("data/user.json", User.class);
+
+// 2. Map an array to a List of DTOs
+List<User> users = JsonResourceReader.readAsList("data/users.json", User.class);
+
+// 3. Map to a generic Map
+Map<String, Object> config = JsonResourceReader.readAsMap("config.json");
+String theme = (String) config.get("theme");
+
+// 4. Map an array to a List of generic Maps
+List<Map<String, Object>> items = JsonResourceReader.readAsListOfMaps("items.json");
+
+// 5. Query data using a path-like syntax (No casting required)
+JsonNode root = JsonResourceReader.readAsTree("config.json");
+int timeout = root.path("server").path("timeout").asInt(3000); 
+
+// Looks inside src/main/resources/data/config.json first.
+// If missing, looks for an actual folder on your hard drive at C:/data/config.json (or relative to working directory).
+Map<String, Object> config = JsonResourceReader.readAsMap("data/config.json");
+
+*/

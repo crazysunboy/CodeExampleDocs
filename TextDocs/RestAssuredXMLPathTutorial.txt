@@ -1,0 +1,85 @@
+Extracting data from XML using RestAssured’s XmlPath works similarly to JsonPath, leveraging GPath syntax to navigate tags, attributes, and text nodes.
+Here is a detailed tutorial on how to extract different types of data from an XML payload.The Sample XML ResponseWe will use this XML payload for all the examples below. Note that XML differentiates between elements/tags (e.g., <name>) and attributes (e.g., id="101").
+
+xml
+
+<store name="Tech Emporium" location="New York">
+    <books>
+        <book id="101" category="Programming">
+            <title>Java Basics</title>
+            <author>John Doe</author>
+            <price>29.99</price>
+        </book>
+        <book id="102" category="Programming">
+            <title>Advanced Java</title>
+            <author>Jane Doe</author>
+            <price>45.50</price>
+        </book>
+        <book id="103" category="Scripting">
+            <title>Learning Groovy</title>
+            <author>Luke Sky</author>
+            <price>19.99</price>
+        </book>
+    </books>
+    <devices>
+        <laptop brand="Dell" cost="1200" />
+        <phone brand="Apple" cost="999" />
+    </devices>
+</store>
+
+1. Extracting Single Values and Text NodesTo extract text inside a tag, navigate using dot-notation. In XMLPath, you omit the root element (<store>) and begin directly with its children.javaResponse response = RestAssured.get("/store-endpoint");
+XmlPath xmlPath = response.xmlPath();
+
+// Extract plain text from a specific node
+String firstBookTitle = xmlPath.getString("books.book[0].title"); // "Java Basics"
+
+// Extract numbers automatically cast to Java primitives
+double firstBookPrice = xmlPath.getDouble("books.book[0].price"); // 29.99
+
+2. Extracting Attributes Using the @ PrefixIn XML GPath syntax, attributes belong to their parent element and are accessed using the @ symbol.java// Extract an attribute from the root node (use 'store.@attribute')
+String storeName = xmlPath.getString("store.@name"); // "Tech Emporium"
+
+// Extract an attribute from a child node
+String firstBookId = xmlPath.getString("books.book[0].@id"); // "101"
+int laptopCost = xmlPath.getInt("devices.laptop.@cost"); // 1200
+
+3. Extracting Lists of DataWhen you target a recurring element path without specifying an index, XMLPath automatically bundles the values into a java.util.List.java// Extract text nodes from all matching tags
+List<String> allTitles = xmlPath.getList("books.book.title");
+// Output: ["Java Basics", "Advanced Java", "Learning Groovy"]
+
+// Extract attributes from all matching tags
+List<String> allBookIds = xmlPath.getList("books.book.@id");
+// Output: ["101", "102", "103"]
+
+4. Filtering Nodes with Closures (findAll, find)Just like JSON, you can use Groovy closures ({ }) and the implicit iterator keyword it to filter XML nodes based on node values or attribute values.findAll (Returns a List of matches)Find all book titles where the book's price is greater than $20:java// Note: We use .toFloat() inside the closure because XML text is initially treated as a String
+List<String> expensiveTitles = xmlPath.getList(
+    "books.book.findAll { it.price.toFloat() > 20 }.title"
+);
+// Output: ["Java Basics", "Advanced Java"]
+find (Returns the first match)Find the author of the first book that has the attribute category='Scripting':javaString scriptingAuthor = xmlPath.getString(
+    "books.book.find { it.@category == 'Scripting' }.author"
+);
+// Output: "Luke Sky"
+
+5. Multi-Criteria Filtering and TransformationsYou can combine attribute checks and element text checks inside a single closure using standard logical operators (&&, ||).Find the id attribute of books belonging to the "Programming" category that cost less than $40:javaList<String> specificBookIds = xmlPath.getList(
+    "books.book.findAll { it.@category == 'Programming' && it.price.toFloat() < 40 }.@id"
+);
+// Output: ["101"]
+
+6. Working with Aggregate Functions (max, min)Because XML parses node data as Strings by default, you must explicitly cast text values to numeric types inside your GPath aggregates.java// Find the maximum price among all books
+float maxPrice = xmlPath.getFloat(
+    "books.book.price.collect { it.toFloat() }.max()"
+); // 45.50
+
+// Find the ID of the cheapest book
+String cheapestBookId = xmlPath.getString(
+    "books.book.min { it.price.toFloat() }.@id"
+); // "103"
+
+In GPath, "**.find" combines two distinct features: the double-asterisk ** (depth-first search operator) and the .find method (first-match filter expression).Together, **.find means: "Search recursively through the entire document from top to bottom (regardless of structure or nesting depth), and return the very first element that matches my condition."Can it be used in both JsonPath and XMLPath?Yes, but with a major catch regarding the ** operator:In XMLPath: It is fully natively supported. The ** operator acts as a direct shortcut for Groovy's depthFirst() method. It scans structural depths flawlessly.In JsonPath: It is partially supported but highly fragile. Because JSON treats objects, arrays, and primitives differently than a uniform XML tree, a root-level ** wildcard lookup can easily trigger structure-mismatch exceptions or evaluate to null if complex lists are deeply nested.
+
+Summary Checklist for XMLPath GPath Syntax
+Omit Root Node: Start your path string from the immediate children of the root tag.
+@ Symbol: Always prefix attribute lookups with @ (e.g., node.@attribute).
+[n]: Accesses the zero-indexed n-th sibling element (e.g., book[1]).
+.text() or Explicit Casts: Convert text properties using .toFloat() or .toInteger() when evaluating mathematical expressions inside closures.

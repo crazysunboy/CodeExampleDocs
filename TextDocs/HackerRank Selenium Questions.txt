@@ -1,0 +1,609 @@
+Here are the comprehensive, production-grade Java (Selenium 4.x) solutions for the Basic, Intermediate, and Advanced HackerRank challenges.
+------------------------------
+## Tier 1: Basic Level — Dynamic UI Validation & State Checking## Problem Statement
+An automation engine loads a web page with a dynamic registration structure. Complete a method validateAndSubmitForm that performs the following sequential actions:
+
+   1. Navigate to the target url.
+   2. Locate the checkbox element with the ID terms-and-conditions.
+   3. Check if the element is currently selected. If it is not selected, click it to check it.
+   4. Locate the input text box with the attribute name='user-email'. Clear any pre-filled placeholder text and type the provided email string.
+   5. Click the submission button containing the class btn-submit-form.
+   6. Use an explicit wait to wait for a text alert banner with the class status-banner to appear. Return the String text value contained within this banner.
+
+## Java Solution
+
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import java.time.Duration;
+public class BasicFormAutomation {
+    public static String validateAndSubmitForm(WebDriver driver, String url, String email) {
+        // 1. Navigate to target URL
+        driver.get(url);
+        
+        // 2. Check and select terms checkbox if unselected
+        WebElement checkbox = driver.findElement(By.id("terms-and-conditions"));
+        if (!checkbox.isSelected()) {
+            checkbox.click();
+        }
+        
+        // 3. Handle input field safely by clearing pre-filled text
+        WebElement emailInput = driver.findElement(By.name("user-email"));
+        emailInput.clear();
+        emailInput.sendKeys(email);
+        
+        // 4. Click the submission trigger
+        WebElement submitBtn = driver.findElement(By.className("btn-submit-form"));
+        submitBtn.click();
+        
+        // 5. Handle headless server delays via Explicit Wait
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        WebElement banner = wait.until(
+            ExpectedConditions.visibilityOfElementLocated(By.className("status-banner"))
+        );
+        
+        // 6. Return the raw string output
+        return banner.getText();
+    }
+}
+
+------------------------------
+## Tier 2: Intermediate Level — Dynamic Tables & StaleElement Exceptions## Problem Statement
+HackerRank frequently tests the ability to navigate changing DOM elements. Implement a method calculateTotalStock that sums up the stock count of products matching a specific text criteria:
+
+   1. Navigate to the url.
+   2. The page lists a table with the ID inventory-table. Each row is structured as a <tr> containing three cells (<td>): Name, Category, and Stock Level.
+   3. Your method must scan through all rows on the first page.
+   4. Identify rows where the text content of the Category cell matches targetCategory exactly.
+   5. Extract the integer count from the Stock Level cell for matching items and maintain a running total.
+   6. Exception Handling Requirement: The table updates its structure asynchronously every few seconds. If a StaleElementReferenceException occurs while scraping a row, recover gracefully by re-finding the table rows and continuing the count without crashing.
+
+## Java Solution
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.StaleElementReferenceException;import java.util.List;
+public class InventoryScanner {
+    public static int calculateTotalStock(WebDriver driver, String url, String targetCategory) {
+        driver.get(url);
+        int totalStock = 0;
+        int maxAttempts = 3;
+        
+        // Define row locator globally to reuse for dynamic recovery
+        By rowLocator = By.xpath("//table[@id='inventory-table']/tbody/tr");
+        
+        // Initial fetch of the rows list
+        List<WebElement> rows = driver.findElements(rowLocator);
+        
+        for (int i = 0; i < rows.size(); i++) {
+            int attempts = 0;
+            while (attempts < maxAttempts) {
+                try {
+                    // Re-fetch the row list dynamically to avoid stale elements during loop iteration
+                    rows = driver.findElements(rowLocator);
+                    WebElement currentRow = rows.get(i);
+                    
+                    // Locate cell elements relative to the current row execution context
+                    WebElement categoryCell = currentRow.findElement(By.xpath("./td[2]"));
+                    WebElement stockCell = currentRow.findElement(By.xpath("./td[3]"));
+                    
+                    if (categoryCell.getText().trim().equalsIgnoreCase(targetCategory)) {
+                        int stockVal = Integer.parseInt(stockCell.getText().trim());
+                        totalStock += stockVal;
+                    }
+                    break; // Action succeeded, break retry loop to move to the next item
+                } catch (StaleElementReferenceException e) {
+                    attempts++;
+                    // Fallback cushion block to recover node link state before retrying
+                    if (attempts >= maxAttempts) {
+                        System.err.println("Failed to parse row index " + i + " due to volatile dynamic layout updates.");
+                    }
+                }
+            }
+        }
+        return totalStock;
+    }
+}
+
+------------------------------
+## Tier 3: Advanced Level — Shadow DOM Traversal & Multiple Window Handling## Problem Statement
+On modern web platforms, traditional element querying methods (driver.findElement) fail when interacting with encapsulated components like Shadow DOM root boundaries or multi-tab flows. Implement extractSecureToken to solve the following setup:
+
+   1. Navigate to the initial landing dashboard at url.
+   2. Locate a button with the text identifier "Launch Portal". Clicking this button triggers a script that opens a brand new browser tab / window.
+   3. Your driver context must track and switch over to this newly created window handle securely.
+   4. On this new window, the primary UI component is hidden deep within a custom web component wrapper with the ID secure-widget.
+   5. Access this custom component's Shadow Root context via modern Selenium 4 native capabilities, navigate internally to find an input block with the CSS tag selector input#token-field, and pull its value attribute string.
+
+## Java Solution
+
+import org.openqa.selenium.By;import org.openqa.selenium.SearchContext;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.support.ui.ExpectedConditions;import org.openqa.selenium.support.ui.WebDriverWait;import java.time.Duration;import java.util.Set;
+public class AdvancedPortalAutomation {
+    public static string extractSecureToken(WebDriver driver, String url) {
+        driver.get(url);
+        String originalWindow = driver.getWindowHandle();
+
+        // 1. Click external link to launch a secondary browser window process
+        WebElement launchBtn = driver.findElement(By.xpath("//button[text()='Launch Portal']"));
+        launchBtn.Click();
+
+        // 2. Loop handles collection using WebDriverWait until the new window registration appears
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        wait.until(ExpectedConditions.numberOfWindowsToBe(2));
+
+        Set<String> allWindows = driver.getWindowHandles();
+        for (String windowHandle : allWindows) {
+            if (!windowHandle.equals(originalWindow)) {
+                driver.switchTo().window(windowHandle);
+                break;
+            }
+        }
+
+        // 3. Locate the Shadow Host element node
+        WebElement shadowHost = wait.until(
+            ExpectedConditions.presenceOfElementLocated(By.id("secure-widget"))
+        );
+
+        // 4. Use native Selenium 4 getShadowRoot() method (Bypasses manual JS Injection)
+        SearchContext shadowRoot = shadowHost.getShadowRoot();
+
+        // 5. Query inside the isolated shadow layout boundary using CSS Selectors (XPath is forbidden inside Shadow DOM)
+        WebElement tokenField = shadowRoot.findElement(By.cssSelector("input#token-field"));
+        String secretTokenValue = tokenField.getAttribute("value");
+
+        return secretTokenValue;
+    }
+}
+
+If you want to keep preparing, let me know if you would like to:
+
+* Set up a TestNG or JUnit 5 project template with Page Object Model (POM) structure.
+* Practice complex dynamic interaction questions (like drag-and-drop, sliders, or handling multi-layered nested iframes).
+
+HackerRank evaluates Selenium skills via containerized, project-based tests rather than standard multiple-choice questions. In these assessments, you are given a full-stack, browser-independent environment where you must write real Java Selenium automation scripts to pass specific functional requirements. [1] 
+The HackerRank Skills Directory breaks these questions down into Basic, Intermediate, and Advanced tiers. Below are the actual core practical tasks, interview questions, and Java code solutions mapped to each HackerRank evaluation level. [1] 
+------------------------------
+## 🟢 Basic Level: Web Forms & Basic Locators
+At this level, HackerRank tests your foundational knowledge of HTML DOM, basic locators (ID, Name, CSS selectors), and simple action interactions. [1, 2] 
+## 1. Login and Registration Automation Task [2] 
+
+* Scenario: Navigate to a target submission form, input user credentials, select a checkbox, and click submit. Verify that a successful login message appears.
+* Key Java Solution: [1, 2] 
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.chrome.ChromeDriver;
+public class BasicFormAutomation {
+    public static void main(String[] args) {
+        WebDriver driver = new ChromeDriver();
+        driver.get("https://example-test-site.com");
+
+        // Locate elements using basic locators
+        WebElement username = driver.findElement(By.id("username"));
+        WebElement password = driver.findElement(By.name("password"));
+        WebElement termsCheckbox = driver.findElement(By.cssSelector("input[type='checkbox']"));
+        WebElement submitButton = driver.findElement(By.id("submit-btn"));
+
+        // Perform actions
+        username.sendKeys("testUser");
+        password.sendKeys("Password123");
+        if (!termsCheckbox.isSelected()) {
+            termsCheckbox.click();
+        }
+        submitButton.click();
+
+        // Validation
+        WebElement successMessage = driver.findElement(By.className("success-flash"));
+        if (successMessage.isDisplayed()) {
+            System.out.println("Test Passed: Login Successful");
+        }
+        driver.quit();
+    }
+}
+
+## 2. Basic Web Authentication Popup Task [1, 2] 
+
+* Scenario: Handle a basic HTTP browser authentication/login pop-up window.
+* Solution/Concept: You cannot locate browser-native alerts via standard HTML elements. Instead, pass the credentials directly through the URL syntax: https://domain.com. [1, 2] 
+
+driver.get("https://example-test-site.com");
+
+------------------------------
+## 🟡 Intermediate Level: Web Scraping, Dynamic Elements & XPath
+This level focuses on scraping data from complex structures, managing dynamic element lookups, and detecting broken page parts. [3] 
+## 1. Dynamic Table Web Scraping Task [1, 3] 
+
+* Scenario: Scrape an entire row or target text cell from a dynamically rendering web table matching specific text.
+* Key Java Solution: [1, 3] 
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import java.util.List;
+public class WebScrapingTable {
+    public static void scrapeData(WebDriver driver) {
+        driver.get("https://example-test-site.com");
+
+        // Using dynamic XPath matching a specific column structure
+        List<WebElement> rows = driver.findElements(By.xpath("//table[@id='data-table']/tbody/tr"));
+        
+        for (WebElement row : rows) {
+            String rowText = row.getText();
+            // Search criteria inside scraped element 
+            if (rowText.contains("Target Product")) {
+                String price = row.findElement(By.xpath("./td[3]")).getText();
+                System.out.println("Scraped Price: " + price);
+            }
+        }
+    }
+}
+
+## 2. Broken Link and Image Detection Task [3] 
+
+* Scenario: Parse a web page to find all <a> tags and identify which links return broken HTTP status codes (400+ or 500+).
+* Key Java Solution: [3] 
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import java.net.HttpURLConnection;import java.net.URL;import java.util.List;
+public class BrokenLinks {
+    public static void checkLinks(WebDriver driver) {
+        List<WebElement> links = driver.findElements(By.tagName("a"));
+        
+        for (WebElement link : links) {
+            String url = link.getAttribute("href");
+            if (url == null || url.isEmpty()) continue;
+            
+            try {
+                HttpURLConnection huc = (HttpURLConnection)(new URL(url).openConnection());
+                huc.setRequestMethod("HEAD");
+                huc.connect();
+                int responseCode = huc.getResponseCode();
+                
+                if (responseCode >= 400) {
+                    System.out.println("Broken Link Found: " + url + " Code: " + responseCode);
+                }
+            } catch (Exception e) {
+                System.out.println("Error connecting to link: " + url);
+            }
+        }
+    }
+}
+
+------------------------------
+## 🔴 Advanced Level: Framework Design, Synchronization & Shadow DOM
+Advanced scenarios challenge your architecture strategy, pipeline setup, synchronization controls, and interactions with modern web components like encapsulated Shadow trees. [4] 
+## 1. Handling Synchronization (Implicit vs. Explicit vs. Fluent Wait) [4] 
+
+* Scenario: Elements load asynchronously via AJAX or API delays. HackerRank evaluation code strictly monitors test stability and timing failures. [1, 4] 
+* Question: What is the difference and when do you use each? [4] 
+* Answer:
+* Implicit Wait: Globally tells the driver to poll the DOM for a set period before throwing NoSuchElementException. Avoid mixing this with explicit waits because it causes unpredictable timeouts.
+   * WebDriverWait (Explicit Wait): Halts code execution until a specific expected condition (like element visibility or clickability) is met. Always prefer this for production frameworks.
+   * FluentWait: An extension of Explicit Wait that permits modifying the polling frequency and defining specific exemptions to ignore (e.g., NoSuchElementException) during the wait sequence. [4, 5, 6] 
+* Advanced Explicit implementation code:
+
+import org.openqa.selenium.support.ui.WebDriverWait;import org.openqa.selenium.support.ui.ExpectedConditions;import java.time.Duration;
+
+WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+WebElement dynamicElement = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("delayed-loader")));
+dynamicElement.click();
+
+## 2. Automated Interaction with Shadow DOM Elements [4] 
+
+* Scenario: Elements hidden inside an isolated Shadow root cannot be located using standard global XPath or standard selectors.
+* Key Java Solution (Selenium 4+ style): [4] 
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.SearchContext;
+public class ShadowDomInteraction {
+    public static void interactWithShadowElement(WebDriver driver) {
+        driver.get("https://example-test-site.com");
+
+        // 1. Locate the shadow host parent element
+        WebElement shadowHost = driver.findElement(By.cssSelector("#shadow-host-element"));
+        
+        // 2. Extract the search context from the shadow root
+        SearchContext shadowRoot = shadowHost.getShadowRoot();
+        
+        // 3. Locate the actual nested element inside the shadow root context
+        WebElement shadowInput = shadowRoot.findElement(By.cssSelector(".inside-shadow-input"));
+        shadowInput.sendKeys("Interacting through Shadow DOM");
+    }
+}
+
+## 3. Executing Arbitrary Code via JavaScriptExecutor [7] 
+
+* Scenario: Interacting with elements that are blocked by overlays or scrolling pages when standard .click() operations fail.
+* Key Java Solution: [7, 8] 
+
+import org.openqa.selenium.JavascriptExecutor;import org.openqa.selenium.WebElement;
+// Typecasting driver to JavascriptExecutor
+JavascriptExecutor js = (JavascriptExecutor) driver;
+// Example A: Infinite scroll or specific pixel window downscroll
+js.executeScript("window.scrollBy(0,500)");
+// Example B: Direct background Javascript click element execution bypassing UI layers
+WebElement hiddenButton = driver.findElement(By.id("hidden-click"));
+js.executeScript("arguments[0].click();", hiddenButton);
+
+Are you preparing for an upcoming technical interview assessment on HackerRank? If so, I can generate a custom interactive multiple-choice practice quiz or provide a full Page Object Model (POM) architecture framework setup in Java. Let me know which direction you'd like to take!
+
+[1] [https://www.hackerrank.com](https://www.hackerrank.com/blog/evaluate-selenium-expertise-hackerrank/)
+[2] [https://www.hackerrank.com](https://www.hackerrank.com/skills-directory/selenium_basic)
+[3] [https://www.hackerrank.com](https://www.hackerrank.com/skills-directory/selenium_intermediate)
+[4] [https://www.finalroundai.com](https://www.finalroundai.com/blog/advanced-selenium-interview-questions)
+[5] [https://www.youtube.com](https://www.youtube.com/watch?v=QjKJZLKApys)
+[6] [https://www.wecreateproblems.com](https://www.wecreateproblems.com/interview-questions/selenium-interview-questions)
+[7] [https://medium.com](https://medium.com/@shakeelahmed_28139/java-selenium-interview-questions-and-answers-25edf9396b3f)
+[8] [https://www.qascript.com](https://www.qascript.com/blog/selenium-interview-questions-and-answers)
+
+HackerRank's Selenium question library evaluates candidates across 10 single-page, browser-independent web challenges. In these assessments, you are typically provided an integrated IDE where you must complete a specific Java method using the WebDriver instance provided in the method signature to interact with a real-time rendered webpage.The coding problems are divided into three tier levels according to the HackerRank Skills Directory:1. Basic Level CompetenciesAt this level, the focus is on mastering standard UI automation and locating elements via XPath, ID, or CSS selectors.Form Submission Automation: Writing scripts to target input text fields, select dropdown values, check boxes, and click submit buttons (e.g., automated User Registration or Login flows).Implicit & Explicit Waits: Handling elements that do not load instantly. You will need to use WebDriverWait and ExpectedConditions to wait for elements to become visible or clickable.Example Coding Pattern (Form Submission & Explicit Wait)javaimport org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import java.time.Duration;
+
+public class Solution {
+    public static void fillRegistrationForm(WebDriver driver, String username, String email) {
+        // 1. Locate elements using precise locators
+        WebElement nameField = driver.findElement(By.id("username"));
+        WebElement emailField = driver.findElement(By.cssSelector("input[type='email']"));
+        WebElement submitButton = driver.findElement(By.id("submit-btn"));
+        
+        // 2. Interact with elements
+        nameField.sendKeys(username);
+        emailField.sendKeys(email);
+        submitButton.click();
+        
+        // 3. Handle explicit wait for confirmation
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+        wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("success-message")));
+    }
+}
+Use code with caution.2. Intermediate Level CompetenciesIntermediate questions require handling web browser pop-ups, frames, and complex document object model (DOM) navigation.Web Authentication: Handling basic HTTP authentication pop-ups or native JavaScript Alert modals.Web Scraping / Data Tables: Traversing complex tables or paragraph chunks using specialized XPath axes (like following-sibling:: or parent::) to extract explicit texts like phone numbers or calculated price totals.Example Coding Pattern (Handling Alerts & Windows)javaimport org.openqa.selenium.Alert;
+import org.openqa.selenium.WebDriver;
+
+public class AlertHandler {
+    public static void handleConfirmationAlert(WebDriver driver, boolean acceptAlert) {
+        // Switch to the active JavaScript alert
+        Alert alert = driver.switchTo().alert();
+        
+        if (acceptAlert) {
+            alert.accept(); // Clicks 'OK'
+        } else {
+            alert.dismiss(); // Clicks 'Cancel'
+        }
+    }
+}
+Use code with caution.3. Advanced Level CompetenciesAdvanced problems assess end-to-end automation pipelines, scraping massive dynamic datasets, and optimizing performance.Data Entry Automation: Reading mock input streams or arrays and bulk-entering that information into dynamic data-grid components.Executing JavaScript: Using the JavascriptExecutor interface to scroll down infinite-loading containers, or forcing clicks on elements hidden behind overlay divs.Example Coding Pattern (JavaScript Execution)javaimport org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+
+public class JavaScriptUtils {
+    public static void scrollAndClick(WebDriver driver, By locator) {
+        WebElement element = driver.findElement(locator);
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        
+        // Scroll the element into the viewport view
+        js.executeScript("arguments[0].scrollIntoView(true);", element);
+        
+        // Perform a JavaScript forced click if blocked by an overlay
+        js.executeScript("arguments[0].click();", element);
+    }
+}
+Use code with caution.💡 Core Tips for Passing HackerRank Selenium ExamsRely on Java Fundamentals: HackerRank questions evaluate your data structure knowledge alongside automation. For instance, parsing structured data out of a table may require using a HashMap or List to hold values before performing validations.Master Relative XPath: Practice using conditions inside XPaths like //button[contains(@class, 'btn-primary')] or navigating up the DOM tree via ...Avoid Thread.sleep(): Hardcoded sleep intervals will often cause your code to time out on HackerRank's test servers. Always use dynamic WebDriverWait rules.Would you like to focus on a specific scenario, such as extracting data from web tables, or would you like to see a sample problem involving handling dropdown lists?
+
+HackerRank evaluates Java Selenium skills through "Project-based" containerized questions. Instead of writing a pure algorithmic function, you are dropped into a full-stack, live-browser environment where you must write a functional automation script using Selenium WebDriver and Java to interact with a target web application. [1, 2] 
+The core competencies and layout of coding challenges you face on the platform break down into specific difficulty levels and practical examples:
+------------------------------
+## 📋 Core Core Competencies Tested
+According to the [HackerRank Skills Directory](https://www.hackerrank.com/skills-directory/selenium_basic), tasks are broken down into three tiers: [3] 
+
+| Difficulty | Core Competencies Tested | Typical Task Types |
+|---|---|---|
+| Basic | • Form Handling & Validation • Dynamic Element Finding • Basic Web Authentication | Login/Registration forms, entering text into textboxes, clicking buttons using By.id or By.cssSelector. |
+| Intermediate | • Advanced XPath Filtering • Web Scraping / Data Extraction • Broken Link Detection | Navigating dynamic tables, extracting specific lists of strings, detecting broken <a> tags or iframes. |
+| Advanced | • Cross-browser behaviors • Explicit & Fluent Waits • Custom JavaScript Execution | Handling async data loading, dealing with multi-window authentication popups, or headless browser optimization. |
+
+------------------------------
+## 💻 HackerRank Coding Challenge Examples## 1. Basic: Form Submission & Validation [2, 3] 
+Problem Statement: Navigate to a registration form. Enter specific user credentials, check the "Terms of Service" checkbox, click submit, and verify that the page displays a success banner containing the text "Registration Successful".
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.chrome.ChromeDriver;
+public class FormAutomation {
+    public static void main(String[] args) {
+        // Driver configuration is pre-handled inside HackerRank containers
+        WebDriver driver = new ChromeDriver();
+        
+        try {
+            driver.get("https://hackerrank.com");
+            
+            // Populate form fields
+            driver.findElement(By.id("username")).sendKeys("testUser123");
+            driver.findElement(By.id("password")).sendKeys("SecurePass!99");
+            
+            // Check checkbox and click submit
+            WebElement termsCheckbox = driver.findElement(By.cssSelector("input[type='checkbox']"));
+            if (!termsCheckbox.isSelected()) {
+                termsCheckbox.click();
+            }
+            driver.findElement(By.id("submit-btn")).click();
+            
+            // Assertion check
+            String successMessage = driver.findElement(By.id("message-banner")).getText();
+            if (successMessage.contains("Registration Successful")) {
+                System.out.println("TEST PASSED");
+            } else {
+                System.out.println("TEST FAILED");
+            }
+        } finally {
+            driver.quit();
+        }
+    }
+}
+
+## 2. Intermediate: Web Scraping Dynamic Tables [1, 4] 
+Problem Statement: An e-commerce product table updates items asynchronously. Write a script using XPath conditions to locate all row elements, filter out the ones with prices under $50.00, extract their item names, and print them out. [5] 
+
+import org.openqa.selenium.By;import org.openqa.selenium.WebDriver;import org.openqa.selenium.WebElement;import org.openqa.selenium.chrome.ChromeDriver;import java.util.List;
+public class TableScraping {
+    public static void main(String[] args) {
+        WebDriver driver = new ChromeDriver();
+        
+        try {
+            driver.get("https://hackerrank.com");
+            
+            // Using XPath to find products under a certain price conditional constraint
+            // e.g., finding the rows where price text column value meets structural rules
+            List<WebElement> productRows = driver.findElements(By.xpath("//table[@id='product-table']/tbody/tr"));
+            
+            for (WebElement row : productRows) {
+                S tring name = row.findElement(By.xpath("./td[@class='prod-name']")).getText();
+                String priceText = row.findElement(By.xpath("./td[@class='prod-price']")).getText();
+                
+                double price = Double.parseDouble(priceText.replace("$", ""));
+                if (price < 50.00) {
+                    System.out.println("Affordable Product: " + name);
+                }
+            }
+        } finally {
+            driver.quit();
+        }
+    }
+}
+
+------------------------------
+## 💡 High-Yield Tips for Clearing the HackerRank Automation Test
+
+* 
+* Master Explicit Waits: HackerRank test runner scripts often evaluate your code against slow, synthetic networks. Avoid hardcoded Thread.sleep(). Rely heavily on WebDriverWait with ExpectedConditions.visibilityOfElementLocated() to keep tests reliable. [6] 
+* Locate Elements Robustly: Avoid highly brittle, absolute XPaths generated by default browser tools. Lean toward relative paths using specific attributes or sub-string containing lookups (e.g., //button[contains(@class, 'btn-primary')]). [5] 
+* Handle NoSuchElementException safely: If you are testing for whether a conditional element successfully disappears or appears, evaluate the context list sizes via driver.findElements().size() rather than a single findElement(), preventing sudden script crashes. [7] 
+* 
+
+Are you preparing for a specific company assessment (like IBM, Amazon, etc.), or would you like to focus on mock exercises for a particular concept, such as handling pop-ups, frames, or dropdowns? [2, 8, 9] 
+
+[1] [https://www.hackerrank.com](https://www.hackerrank.com/blog/evaluate-selenium-expertise-hackerrank/)
+[2] [https://support.hackerrank.com](https://support.hackerrank.com/articles/4357184721-how-to-assess-selenium-skills-of-a-candidate-on-hackerrank)
+[3] [https://www.hackerrank.com](https://www.hackerrank.com/skills-directory/selenium_basic)
+[4] [https://www.hackerrank.com](https://www.hackerrank.com/skills-directory/selenium_intermediate)
+[5] [https://brainly.in](https://brainly.in/question/61109355)
+[6] [https://www.testdome.com](https://www.testdome.com/tests/java-selenium-online-test/209)
+[7] [https://www.wecreateproblems.com](https://www.wecreateproblems.com/interview-questions/selenium-interview-questions)
+[8] [https://www.youtube.com](https://www.youtube.com/watch?v=ymw4_y6N4Ck)
+[9] [https://www.scribd.com](https://www.scribd.com/document/939451262/Hacker-Rank-Questions)
+In an XPath selector, ../ selects the parent of the current element.
+It allows you to look "up" the HTML tree instead of down. Think of it exactly like navigating directories in a command line or file system, where .. means "go up one folder."
+------------------------------
+## Why Use ../? (The "Reverse" Lookup)
+In CSS selectors, you can only move downward or sideways to find elements. XPath is unique because it allows you to look up to a parent or ancestor.
+The most common use case in automation is finding a generic element (like an image or a layout wrapper) based on a highly unique piece of text inside it.
+## Visualizing the Difference
+Consider this HTML snippet of a product card:
+
+<div class="product-card">
+    <h3>Wireless Mouse</h3>
+    <button class="btn-buy">Add to Cart</button>
+</div>
+
+If you need to click the "Add to Cart" button, but there are 20 identical buttons on the page, you can anchor your search to the unique text "Wireless Mouse" and climb up the tree using ../:
+
+//h3[text()='Wireless Mouse']/../button[@class='btn-buy']
+
+## How Selenium evaluates this step-by-step:
+
+   1. //h3[text()='Wireless Mouse'] → Finds the specific heading element.
+   2. /../ → Moves up one level to its parent, which is the <div class="product-card">.
+   3. /button[@class='btn-buy'] → Moves down into that specific parent's button.
+
+------------------------------
+## Alternative: The parent:: Axis
+In XPath, ../ is actually a shorthand shortcut for the parent::node() axis.
+
+| Shorthand | Full XPath Syntax | What it does |
+|---|---|---|
+| ../ | parent::* | Goes up exactly one level to the immediate parent. |
+| ancestor::div[1] | ancestor::div[1] | Goes up multiple levels to find the nearest <div> ancestor. |
+
+Tip: If you need to jump up 3 or 4 levels (e.g., ../../../../), it is usually cleaner and less brittle to use ancestor::div[@class='container'] instead of chaining multiple ../ shortcuts.
+Are you trying to locate a specific element that is hard to anchor, or are you converting a CSS selector into XPath? Tell me what your HTML looks like, and I can help you write the cleanest path for it!
+
+There is no direct CSS selector equivalent for that exact XPath because CSS selectors cannot navigate backward or upward to a parent element. CSS can only look downward (descendants) or sideways (subsequent siblings).
+However, you can achieve the same goal in modern automation by using new CSS features or standard Selenium strategies.
+## Option 1: The Modern CSS Way (Using :has())
+If your test framework and browser support modern CSS (standard in most modern evergreen browsers like Chrome, Firefox, and Edge), you can use the :has() relational pseudo-class.
+Instead of starting at the text and going up, you target the parent container that contains the text, and then go down to the button:
+
+div.product-card:has(h3):has(button.btn-buy)
+
+(Note: CSS cannot natively match exact text content like text()='Wireless Mouse', so this relies on structural tracking or data attributes).
+------------------------------
+## Option 2: The Practical Selenium Strategy
+Since CSS cannot look up elements by text content, automation engineers typically handle this scenario in one of three ways:
+## 1. Stick with XPath (Best for Text Anchors)
+If you absolutely must use the text "Wireless Mouse" as your anchor, keep using XPath. It is the best tool for text-based traversal. You can make it slightly cleaner by using ancestor:: or following-sibling:: instead of ../:
+
+//div[h3='Wireless Mouse']/button[@class='btn-buy']
+
+## 2. Leverage Data Attributes (Best Practice for CSS)
+If you have control over the application code, ask your developers to add a unique data attribute to the button or the card. This eliminates the need for complex traversal entirely:
+
+<button class="btn-buy" data-product="wireless-mouse">Add to Cart</button>
+
+The CSS selector becomes incredibly simple:
+
+button[data-product="wireless-mouse"]
+
+## 3. Split the Logic in Selenium (Code-based solution)
+If you prefer to avoid XPath completely, you can find the container first using standard Selenium methods or Playwright's text locators, and then scope a CSS selector inside it.
+Are you restricted to pure CSS selectors by your testing framework (like older versions of Cypress), or can you use XPath? If you can share a snippet of your actual HTML structure, I can help you find a highly stable locator strategy for it!
+
+To use the following-sibling axis in XPath, you use the syntax following-sibling::tag_name.
+This axis allows you to find elements that share the same parent and come after your current element in the HTML tree. It is highly useful because it allows you to look "sideways" without needing to climb up to the parent using ../ first.
+------------------------------
+## Visualizing the Syntax
+Consider this HTML structure for a form or table row:
+
+<div class="row">
+    <label>Username</label>
+    <input type="text" class="form-input">
+    <span class="error-msg">Username is required</span>
+</div>
+
+## Example 1: Finding the Input field next to a specific Label
+If you anchor your search to the text "Username", you can target the input box directly next to it:
+
+//label[text()='Username']/following-sibling::input
+
+
+* How it works: Selenium finds the <label>. From there, it looks forward among its brothers and sisters (siblings) to find the next <input>.
+
+## Example 2: Finding the Error Message
+If you want to grab the error message associated with that specific username field:
+
+//label[text()='Username']/following-sibling::span[@class='error-msg']
+
+------------------------------
+## Key Rules to Remember
+
+   1. They must share the exact same parent: following-sibling will not look inside neighboring divs or jump out of the current container.
+   2. It only looks forward (downward in the HTML): It will only find elements that appear after your anchor element. If you need to find a sibling that comes before your anchor, use preceding-sibling:: instead.
+   3. It matches all subsequent siblings by default: If there are three inputs after your label, following-sibling::input will find all three.
+
+------------------------------
+## How to handle multiple siblings (Indexing)
+If you have a list where multiple matching siblings exist, you can use numbers (indices) to target a specific one. Note that XPath indexing is 1-based (not 0-based).
+
+<p class="header">List of Items</p>
+<li>Item A</li> <!-- Sibling #1 -->
+<li>Item B</li> <!-- Sibling #2 -->
+<li>Item C</li> <!-- Sibling #3 -->
+
+
+* To get Item A (the very next sibling):
+//p[@class='header']/following-sibling::li[1]
+* To get Item B:
+//p[@class='header']/following-sibling::li[2]
+
+## Shortcut Alternative: following::
+Be careful not to confuse following-sibling:: with following::.
+
+* following-sibling:: strictly looks at elements sharing the same parent.
+* following:: looks at every single element that comes after the anchor in the entire HTML document, regardless of structure. (Usually avoided because it is too broad and slow).
+
+Are you dealing with a dynamic web table or a form where the elements don't have unique IDs? If you can share a quick snippet of your HTML layout, I can show you exactly how to write the following-sibling path for it!
+

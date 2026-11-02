@@ -1,0 +1,12 @@
+            <property>
+              <name>testnames</name>
+              <value>ClassOne,ClassTwo</value>
+            </property>
+			
+mvn test "-Dtestnames=ClassOne,ClassTwo"
+
+mvn test "-Dtest_names_to_include=.*Two.*"
+
+mvn -Dtest_names_to_include=*.Two.* test
+
+mvn -DargLine="-Dtest_names_to_include=*.Two.*" test

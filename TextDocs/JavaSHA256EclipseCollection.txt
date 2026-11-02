@@ -1,0 +1,67 @@
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import org.eclipse.collections.api.block.HashingStrategy;
+import org.eclipse.collections.api.map.primitive.MutableObjectIntMap;
+import org.eclipse.collections.impl.block.factory.HashingStrategies;
+import org.eclipse.collections.impl.map.mutable.primitive.ObjectIntHashingStrategyMap;
+
+/**
+ * High-efficiency Map using SHA-256 byte[] as keys and primitive ints as values.
+ * This bypasses String overhead and Integer boxing.
+ */
+public class MemoryEfficientHashStore {
+
+    private final MessageDigest digest;
+    private final MutableObjectIntMap<byte[]> map;
+
+    public MemoryEfficientHashStore(int expectedCapacity) {
+        try {
+            this.digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not found", e);
+        }
+
+        // Define strategy for byte[] content equality and hashing
+        HashingStrategy<byte[]> strategy = HashingStrategies.fromFunction(
+                Arrays::hashCode,
+                Arrays::equals
+        );
+
+        // Initialize Eclipse Collections map with the strategy
+        this.map = new ObjectIntHashingStrategyMap<>(strategy, expectedCapacity);
+    }
+
+    /**
+     * Converts string to SHA-256 byte[] and stores it with an int value.
+     * No intermediate Hex Strings are created.
+     */
+    public void put(String input, int value) {
+        byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+        map.put(hash, value);
+    }
+
+    /**
+     * Retrieves the primitive int for a given string input.
+     * Returns 0 if not found (default for primitive maps).
+     */
+    public int get(String input) {
+        byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+        return map.get(hash);
+    }
+
+    public int size() {
+        return map.size();
+    }
+
+    public static void main(String[] args) {
+        MemoryEfficientHashStore store = new MemoryEfficientHashStore(1000);
+        
+        store.put("user_12345", 500);
+        store.put("user_67890", 1200);
+
+        System.out.println("Value for user_12345: " + store.get("user_12345"));
+        System.out.println("Total entries: " + store.size());
+    }
+}

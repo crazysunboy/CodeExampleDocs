@@ -1,0 +1,121 @@
+/*
+Required pom.xml ModificationTo make sure Maven listens to the -DsuiteXmlFile property sent by Jenkins, ensure your maven-surefire-plugin configuration inside your pom.xml maps to a variable like this:
+
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <version>3.2.5</version>
+    <configuration>
+        <suiteXmlFiles>
+            <!-- Evaluates property passed by Jenkins, defaults to testng.xml if none sent -->
+            <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
+        </suiteXmlFiles>
+    </configuration>
+</plugin>
+
+Make sure you declare a default property value in your pom.xml <properties> block so local testing still functions without parameters:
+<properties>
+    <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+</properties>
+
+Permanent Jenkins Content Security Policy (CSP) FixThe default rules prevent Extent Reports from executing JavaScript or loading CSS layouts locally. Because the Script Console solution vanishes on reboot, use one of the persistent hooks below based on your underlying Jenkins server environment.The relaxed header value required for interactive frameworks like Extent is:sandbox allow-same-origin allow-scripts; default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';Option A: If your Jenkins Server runs on Linux (Systemd)The most structural fix is creating an initialization Groovy hook that boots alongside the application:Log into your Jenkins master server via SSH terminal.Create an initialization directory (if missing):
+sudo mkdir -p /var/lib/jenkins/init.groovy.d
+Create a initialization script:
+bash
+sudo nano /var/lib/jenkins/init.groovy.d/csp-fix.groovy
+Paste the following configuration lines:groovySystem.setProperty("hudson.model.DirectoryBrowserSupport.CSP", "sandbox allow-same-origin allow-scripts; default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';")
+Use code with caution.Adjust file permissions and restart the service:bashsudo chown -R jenkins:jenkins /var/lib/jenkins/init.groovy.d/
+sudo systemctl restart jenkins
+Use code with caution.
+Option B: If your Jenkins Server runs on Windows (Service wrapper)Open your Jenkins root installation directory on your Windows node (typically C:\Program Files\Jenkins or C:\Jenkins).Open the file named jenkins.xml using an editor running with Administrator permissions.Locate the <arguments> xml configuration tag.Insert the global runtime property -Dhudson.model.DirectoryBrowserSupport.CSP="..." directly before the -jar statement:
+<arguments>-Xrs -Xmx256m -Dhudson.model.DirectoryBrowserSupport.CSP="sandbox allow-same-origin allow-scripts; default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';" -jar "%BASE%\jenkins.war" --httpPort=8080</arguments>
+(Ensure it stays on a single line with no unescaped smart quotes).Open Windows Services (services.msc), find Jenkins, and click Restart.If you'd like, let me know:If you need help generating XML list variables dynamically from a folder scan instead of hardcoding choicesIf you encounter any XML formatting syntax issues when editing your pom.xml plugin block
+*/
+
+pipeline {
+    agent any
+
+    // 1. Define the user dropdown interface
+    parameters {
+        choice(
+            name: 'SUITE_XML', 
+            choices: ['testng-regression.xml', 'testng-smoke.xml', 'testng-sanity.xml'], 
+            description: 'Select the TestNG XML suite file to run'
+        )
+    }
+
+    tools {
+        maven 'Maven_3.9.x' // Must match Manage Jenkins -> Tools exactly
+        jdk 'Java_17'       // Must match Manage Jenkins -> Tools exactly
+    }
+
+    stages {
+        stage('Clean Environment') {
+            steps {
+                echo 'Cleaning workspace and terminating any rogue browser instances...'
+                cleanWs()
+                
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            pkill -f chrome || true
+                            pkill -f chromedriver || true
+                        '''
+                    } else {
+                        bat '''
+                            taskkill /F /IM chrome.exe /T /FI "STATUS eq RUNNING" 2>nul || exit 0
+                            taskkill /F /IM chromedriver.exe /T /FI "STATUS eq RUNNING" 2>nul || exit 0
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                echo 'Pulling framework source files from SCM...'
+                checkout scm
+            }
+        }
+
+        stage('Execute TestNG Suite') {
+            steps {
+                // 2. Injecting the parameter dynamically into Maven runtime
+                echo "Launching Maven TestNG execution for suite: ${params.SUITE_XML}"
+                script {
+                    if (isUnix()) {
+                        sh "mvn clean test -DsuiteXmlFile=${params.SUITE_XML}"
+                    } else {
+                        bat "mvn clean test -DsuiteXmlFile=${params.SUITE_XML}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Processing test artifacts and dashboard results...'
+            
+            junit allowEmptyResults: true, testResults: '**/target/surefire-reports/testng-results.xml'
+            
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'target/surefire-reports',
+                reportFiles: 'index.html',
+                reportName: 'Standard TestNG Report'
+            ])
+            
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'target/extent-reports', 
+                reportFiles: 'Spark.html', 
+                reportName: 'Extent Report'
+            ])
+        }
+    }
+}

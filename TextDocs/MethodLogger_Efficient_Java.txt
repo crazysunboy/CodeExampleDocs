@@ -1,0 +1,180 @@
+Here is the complete, final version of your LogUtils class containing all standard logging levels (TRACE, DEBUG, INFO, WARN, ERROR), full parameter support via {}, and exception stack-trace handling.
+## 1. The Complete LogUtils.java
+
+package com.example.util;
+import org.slf4j.Logger;import org.slf4j.LoggerFactory;import org.slf4j.MDC;
+public class LogUtils {
+
+    // --- TRACE ---
+    public static void trace(String message, Object... args) {
+        log("TRACE", message, args);
+    }
+
+    // --- DEBUG ---
+    public static void debug(String message, Object... args) {
+        log("DEBUG", message, args);
+    }
+
+    // --- INFO ---
+    public static void info(String message, Object... args) {
+        log("INFO", message, args);
+    }
+
+    // --- WARN ---
+    public static void warn(String message, Object... args) {
+        log("WARN", message, args);
+    }
+
+    // --- ERROR ---
+    public static void error(String message, Object... args) {
+        log("ERROR", message, args);
+    }
+
+    /**
+     * Core logging router. Thread-safe execution using StackWalker and MDC context variables.
+     */
+    private static void log(String level, String message, Object[] args) {
+        StackWalker.getInstance().walk(frames -> 
+            frames.skip(2) // Skip internal 'log' frame AND the level helper method frame
+                  .findFirst()
+        ).ifPresent(frame -> {
+            String callerClassName = frame.getClassName();
+            
+            // Set the dynamic method name in MDC (isolated safely per individual Thread)
+            MDC.put("methodName", frame.getMethodName());
+            
+            try {
+                Logger logger = LoggerFactory.getLogger(callerClassName);
+                
+                switch (level) {
+                    case "TRACE" -> logger.trace(message, args);
+                    case "DEBUG" -> logger.debug(message, args);
+                    case "WARN"  -> logger.warn(message, args);
+                    case "ERROR" -> logger.error(message, args);
+                    default      -> logger.info(message, args);
+                }
+            } finally {
+                // Ensure context clean-up to protect thread pool environments
+                MDC.remove("methodName");
+            }
+        });
+    }
+}
+
+## 2. Matching logback.xml Configuration
+To view lower-level environments (DEBUG/TRACE), ensure your root level is lowered appropriately inside your configuration file:
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%-5level] %logger{0}::%X{methodName} - %m%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Lowered root level to TRACE to capture deep diagnostics -->
+    <root level="TRACE">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
+
+## 3. Verification Sample
+
+package com.example.service;
+import com.example.util.LogUtils;
+public class DiagnosticTest {
+
+    public void runDiagnostics() {
+        LogUtils.trace("Entering trace loop initialization steps.");
+        LogUtils.debug("Evaluating runtime profile for host target ID: {}", 4049);
+        LogUtils.info("Connection confirmed with database cluster.");
+        LogUtils.warn("System memory threshold exceeded 85%. Proceed with caution.");
+        
+        try {
+            throw new IllegalStateException("Simulated connection timeout.");
+        } catch (Exception e) {
+            LogUtils.error("Diagnostic failure encountered in node: {}", "US-WEST-01", e);
+        }
+    }
+}
+
+Would you like assistance setting up conditional log configurations for this tool so it hides TRACE/DEBUG logs in Production environments but displays them during local development?
+
+To handle different logging levels between Local Development and Production without changing your Java code, you can use Logback's native environment configuration.
+The standard approach uses Logback's <if> condition tag (which requires the standard janino dependency) or Spring Boot's built-in <springProfile> tag if you are working within a Spring project.
+Here are the setups for both vanilla Java and Spring Boot.
+## Approach 1: For Vanilla Java (Using Environment Variables)
+This approach reads an environment variable (like APP_ENV=PROD or APP_ENV=DEV) to decide how to filter the logs.
+## 1. Add the Janino Dependency
+Logback needs the small, lightweight janino compiler library to parse standard conditional if/else statements in your XML configuration. Add this to your pom.xml (Maven) or build.gradle:
+
+<!-- Maven -->
+<dependency>
+    <groupId>org.codehaus.janino</groupId>
+    <artifactId>janino</artifactId>
+    <version>3.1.12</version> <!-- Use the latest stable version available -->
+</dependency>
+
+## 2. Update your logback.xml
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%-5level] %logger{0}::%X{methodName} - %m%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Check the 'APP_ENV' environment variable. Default to PROD if not set -->
+    <if condition='property("APP_ENV").equalsIgnoreCase("DEV")'>
+        <then>
+            <!-- Local Dev Profile: Verbose logging -->
+            <root level="TRACE">
+                <appender-ref ref="CONSOLE" />
+            </root>
+        </then>
+        <else>
+            <!-- Production Profile: Quiet logging, ignores TRACE/DEBUG to save disk space -->
+            <root level="INFO">
+                <appender-ref ref="CONSOLE" />
+            </root>
+        </else>
+    </if>
+</configuration>
+
+------------------------------
+## Approach 2: For Spring Boot Applications (Recommended if using Spring)
+If your application uses Spring Boot, you don't need any extra dependencies. Spring provides the <springProfile> tag out of the box.
+## 1. Rename your configuration file
+Rename logback.xml to logback-spring.xml. This tells Spring Boot to initialize its profile engines before reading the logging properties.
+## 2. Configure logback-spring.xml
+
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%-5level] %logger{0}::%X{methodName} - %m%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Triggered when running with active profile: 'dev' or 'local' -->
+    <springProfile name="dev, local">
+        <root level="TRACE">
+            <appender-ref ref="CONSOLE" />
+        </root>
+    </springProfile>
+
+    <!-- Triggered when running with active profile: 'prod' or 'stage' -->
+    <springProfile name="prod, stage">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+        </root>
+    </springProfile>
+</configuration>
+
+------------------------------
+## How it behaves at runtime
+Your dynamic LogUtils code will stay exactly the same. The environment control layer intercepts the execution call downstream:
+
+* In Development: Calling LogUtils.trace("...") or LogUtils.debug("...") will process normally and print directly into your terminal console.
+* In Production: Calling LogUtils.trace("...") will instantly drop the log payload right at the SLF4J gateway interface level. Because the stack walker frame lookup code is skipped when the log level is disabled by Logback, you suffer zero execution overhead performance cost in production.
+
+Would you like to learn how to change log configurations so that production logs save to a rotating file archive while development logs stay on the console, or is your logging infrastructure complete?
+
